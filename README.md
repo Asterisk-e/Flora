@@ -2,7 +2,7 @@
 
 **Flora is a local productivity suite containing five integrated applications for documents, presentations, spreadsheets, programming and graphic design.**
 
-Designed around a warm pastel-yellow interface, Flora brings everyday productivity tools together in one application, with separate workspaces for each program.
+Flora brings everyday productivity tools together in one application, with separate workspaces for each program.
 
 ---
 
