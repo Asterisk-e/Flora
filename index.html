@@ -1,48 +1,116 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#fff7d6">
-  <meta name="description" content="Flora — five creative tools. One workspace.">
-  <title>Flora — Five Creative Tools</title>
-  <link rel="stylesheet" href="assets/css/flora.css">
-</head>
-<body>
-  <div class="flora-shell" id="flora-shell">
-    <aside class="sidebar" id="sidebar" aria-label="Main navigation">
-      <a class="brand" href="#home" aria-label="Flora home"><span class="brand-mark">F</span><span class="brand-name">Flora</span></a>
-      <nav class="nav-list" aria-label="Applications">
-        <button class="nav-item active" data-open="home"><span class="nav-glyph">H</span><span class="nav-label">Home</span></button>
-        <button class="nav-item" data-open="azalea"><span class="nav-glyph">A</span><span class="nav-label">Azalea</span></button>
-        <button class="nav-item" data-open="iris"><span class="nav-glyph">I</span><span class="nav-label">Iris</span></button>
-        <button class="nav-item" data-open="amaryllis"><span class="nav-glyph">S</span><span class="nav-label">Amaryllis</span></button>
-        <button class="nav-item" data-open="lupine"><span class="nav-glyph">L</span><span class="nav-label">Lupine</span></button>
-        <button class="nav-item" data-open="anemone"><span class="nav-glyph">P</span><span class="nav-label">Anemone</span></button>
-      </nav>
-      <div class="sidebar-bottom">
-        <button class="nav-item" data-open="settings"><span class="nav-glyph">T</span><span class="nav-label">Settings</span></button>
-        <div class="storage-card" title="Local browser storage estimate">
-          <div class="storage-ring" id="storage-ring"><span id="storage-percent">—</span></div>
-          <div class="storage-copy"><strong>Local workspace</strong><small id="storage-caption">Checking storage…</small></div>
-        </div>
-        <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-expanded="true">Collapse sidebar</button>
-      </div>
-    </aside>
-
-    <main class="main-area">
-      <header class="topbar">
-        <button class="mobile-menu" id="mobile-menu" type="button" aria-label="Toggle navigation">Menu</button>
-        <div class="breadcrumb"><span class="breadcrumb-kicker">FLORA WORKSPACE</span><strong id="page-title">Home</strong></div>
-        <div class="topbar-actions">
-          <button class="quiet-button" id="theme-toggle" type="button">Switch theme</button>
-          <span class="local-status" id="save-status">Stored locally</span>
-        </div>
-      </header>
-      <section class="workspace" id="workspace" aria-live="polite"></section>
-      <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    </main>
-  </div>
-  <script type="module" src="assets/js/main.js"></script>
-</body>
-</html>
+<html lang="en" data-theme="warm"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#fff9df">
+<meta name="description" content="Flora — creative tools for documents, presentations, spreadsheets, code, posters and books.">
+<title>Flora — Creative Workspace</title>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/classic-designers.css"></head><body>
+<div id="app">
+<aside>
+<div class="sidebar-top"><div class="brand">Flora</div><button id="sidebarToggle" type="button" aria-expanded="true" aria-label="Collapse sidebar">Collapse</button></div>
+<div id="profileLabel" class="profile-label">Local profile</div>
+<div class="sidebar-section">Workspace</div>
+<div class="app-nav" aria-label="Workspace navigation">
+ <button id="navHome" data-short="Home">Home</button>
+ <button id="navAzalea" data-short="A">Azalea · Documents</button>
+ <button id="navIris" data-short="I">Iris · Presentations</button>
+ <button id="navAmaryllis" data-short="S">Amaryllis · Spreadsheets</button>
+ <button id="navScripts" data-short="L">Lupine · Code Editor</button>
+ <button id="navAnemone" data-short="P">Anemone · Poster Studio</button>
+ <button id="navCamellia" data-short="B">Camellia · Book Studio</button>
+ <button id="navFiles" data-short="Files">Files</button>
+ <button id="navUsage" data-short="Usage">Usage tracker</button>
+ <button id="navSettings" data-short="Settings">Settings</button>
+</div>
+<div class="sidebar-section">Documents in this profile</div>
+<input id="q" placeholder="Search documents" aria-label="Search documents">
+<div id="list"></div>
+<div class="store"><div class="bar" id="bar"><i id="fill"></i></div><div id="usage"></div><small id="plan"></small><small id="quota"></small><button id="up">Storage settings</button><button id="bk">Back up documents (ZIP)</button><button id="logout" class="alt">Sign out / Switch profile</button></div>
+</aside>
+<main>
+<header><button id="menu">Menu</button><span id="stat" aria-live="polite"></span><button id="exp">Export</button></header>
+<div id="homev" class="scroll"><div class="fwrap">
+<h2>Welcome to Flora</h2><p class="mut" id="homeGreeting">Your workspace, stored locally on this device.</p>
+<div class="home-actions"><button class="primary" id="homeNew">New document</button><button id="homePresentation">New presentation</button><button id="homeScript">New script</button><button id="homeBook">New book</button><button id="homeSettings">Settings</button><button id="homeFiles">Files</button></div>
+<div class="program-grid">
+ <button class="program-card" id="programDocuments"><strong>Azalea</strong><span>Documents for writing, formatting, reviewing and exporting.</span></button>
+ <button class="program-card" id="programPresentations"><strong>Iris</strong><span>Presentations with themes, slide layouts, speaker notes and presenter controls.</span></button>
+ <button class="program-card" id="programSpreadsheets"><strong>Amaryllis</strong><span>Spreadsheets with cell formulas, templates, rows, columns and CSV export.</span></button>
+ <button class="program-card" id="programScripts"><strong>Lupine</strong><span>Code editing with language switching, syntax highlighting and line numbers.</span></button>
+ <button class="program-card" id="programCamellia"><strong>Camellia</strong><span>Create books, booklets, workbooks and multi-page publications.</span></button>
+ <button class="program-card" id="programAnemone"><strong>Anemone</strong><span>Design posters using movable text, shapes and images.</span></button>
+</div>
+<div class="home-card"><h3>Recent documents</h3><div id="recentDocs"></div></div>
+<div class="home-card"><h3>Storage</h3><p id="homeUsage" class="mut"></p></div>
+<div class="home-card"><h3>Your workspace</h3><p class="mut">Your files stay in this browser on this device. Use the sidebar to move between recent documents, your files, settings and local profiles.</p></div>
+</div></div>
+<div id="docv" hidden>
+<div class="ribbon" id="tb">
+ <nav class="ribbon-tabs" aria-label="Document toolbar tabs">
+  <button class="active" data-ribbon-tab="home">Home</button><button data-ribbon-tab="insert">Insert</button><button data-ribbon-tab="layout">Layout</button><button data-ribbon-tab="review">Review</button><button data-ribbon-tab="view">View</button>
+ </nav>
+ <section class="ribbon-panel active" data-ribbon-panel="home">
+  <div class="ribbon-group"><span>Font</span><div class="ribbon-controls"><select id="fontPick" aria-label="Font family"><option value="Newsreader">Newsreader</option><option value="Georgia">Georgia</option><option value="Arial">Arial</option><option value="Verdana">Verdana</option><option value="Tahoma">Tahoma</option><option value="Times New Roman">Times New Roman</option><option value="Courier New">Courier New</option><option value="system-ui">System UI</option></select><select id="sizePick" aria-label="Text size"><option value="2">Small</option><option value="3" selected>Normal</option><option value="4">Large</option><option value="5">Extra large</option><option value="6">Huge</option><option value="7">Maximum</option></select></div><div class="ribbon-controls"><button data-c="bold" title="Bold">Bold</button><button data-c="italic" title="Italic">Italic</button><button data-c="underline" title="Underline">Underline</button><button data-c="strikeThrough" title="Strikethrough">Strikethrough</button><button data-c="superscript">Superscript</button><button data-c="subscript">Subscript</button></div><div class="ribbon-controls"><label class="tool-label">Text colour <input id="textColor" type="color" value="#16202a" aria-label="Text colour"></label><button id="applyColor">Apply</button><label class="tool-label">Highlight <input id="highlightColor" type="color" value="#fff29a" aria-label="Highlight colour"></label><button id="applyHighlight">Apply</button></div></div>
+  <div class="ribbon-group"><span>Paragraph</span><div class="ribbon-controls"><button data-c="insertUnorderedList">Bullets</button><button data-c="insertOrderedList">Numbering</button><button data-c="justifyLeft">Align left</button><button data-c="justifyCenter">Centre</button><button data-c="justifyRight">Align right</button><button data-c="justifyFull">Justify</button><button data-c="indent">Indent</button><button data-c="outdent">Outdent</button></div></div>
+  <div class="ribbon-group"><span>Styles and editing</span><div class="ribbon-controls"><button data-c="formatBlock" data-a="h1">Heading 1</button><button data-c="formatBlock" data-a="h2">Heading 2</button><button data-c="formatBlock" data-a="h3">Heading 3</button><button data-c="formatBlock" data-a="p">Normal text</button><button data-c="formatBlock" data-a="blockquote">Quote</button><button data-c="removeFormat">Clear formatting</button><button data-c="undo">Undo</button><button data-c="redo">Redo</button></div></div>
+ </section>
+ <section class="ribbon-panel" data-ribbon-panel="insert" hidden>
+  <div class="ribbon-group"><span>Insert content</span><div class="ribbon-controls"><button id="linkBtn">Link</button><button id="tableBtn">Table</button><button id="imageBtn">Picture</button><button id="dateBtn">Date and time</button><button data-c="insertHorizontalRule">Horizontal line</button><button id="pageBreakBtn">Page break</button><button id="checklistBtn">Checklist item</button></div></div>
+  <div class="ribbon-group"><span>Document elements</span><div class="ribbon-controls"><button id="tocBtn">Contents outline</button><button id="footnoteBtn">Footnote</button><button id="clearLinkBtn">Remove link</button></div></div>
+ </section>
+ <section class="ribbon-panel" data-ribbon-panel="layout" hidden>
+  <div class="ribbon-group"><span>Page layout</span><div class="ribbon-controls"><label class="tool-label">Line spacing <select id="lineSpacing"><option value="1.3">Compact</option><option value="1.5">1.5</option><option value="1.7" selected>Default</option><option value="2">Double</option></select></label><label class="tool-label">Page width <select id="pageWidth"><option value="680">Narrow</option><option value="780" selected>Standard</option><option value="920">Wide</option></select></label><label class="tool-label">Page padding <select id="pagePadding"><option value="32">Small</option><option value="56" selected>Standard</option><option value="76">Large</option></select></label></div></div>
+ </section>
+ <section class="ribbon-panel" data-ribbon-panel="review" hidden>
+  <div class="ribbon-group"><span>Proofing</span><div class="ribbon-controls"><label class="tool-label"><input type="checkbox" id="spellToggle" checked> Spell checking</label><button id="findBtn">Find</button><button id="replaceBtn">Find and replace</button><button id="wordCountBtn">Word count</button><button id="selectAllBtn">Select all</button></div></div>
+ </section>
+ <section class="ribbon-panel" data-ribbon-panel="view" hidden>
+  <div class="ribbon-group"><span>Document view</span><div class="ribbon-controls"><button id="focusBtn">Focus mode</button><label class="tool-label">Zoom <select id="zoomPick"><option value="80">80%</option><option value="90">90%</option><option value="100" selected>100%</option><option value="110">110%</option><option value="125">125%</option></select></label><button id="showStatsBtn">Document statistics</button></div></div>
+ </section>
+</div>
+<div class="tb" id="ctb" hidden><input id="ctitle" placeholder="main.py" aria-label="File name" autocomplete="off"><select id="lang" aria-label="Programming language"></select><label class="tool-label">Tab width <select id="tabWidth"><option value="2">2</option><option value="4" selected>4</option><option value="8">8</option></select></label><label class="tool-label"><input type="checkbox" id="codeWrap"> Wrap lines</label><label class="tool-label"><input type="checkbox" id="lineNumbers" checked> Line numbers</label><span class="sep"></span><button id="copy">Copy code</button><span id="pos" class="mut"></span></div>
+<div class="scroll" id="richv"><article id="sheet"><input id="title" placeholder="Untitled document" aria-label="Title"><div id="page" contenteditable="true" spellcheck="true" aria-label="Document body"></div></article></div>
+<div id="codev" hidden><div id="gut" aria-hidden="true"></div><div id="cw"><pre id="hl" aria-hidden="true"></pre><textarea id="ta" wrap="off" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Lupine code editor"></textarea></div></div>
+<div id="presv" hidden>
+ <div class="presentation-toolbar"><button id="addSlide">New slide</button><button id="duplicateSlide">Duplicate slide</button><button id="deleteSlide">Delete slide</button><button id="slideUp">Move up</button><button id="slideDown">Move down</button><label>Presentation name <input id="presentationName" type="text" value="Untitled presentation" aria-label="Presentation name"></label><label>Theme <select id="presentationTheme"><option value="light">Light</option><option value="dark">Dark</option><option value="blue">Blue</option><option value="warm">Warm</option><option value="minimal">Minimal</option><option value="contrast">High contrast</option></select></label><button id="startShow" class="primary">Start presentation</button></div>
+ <div class="presentation-options"><label>Slide layout <select id="slideLayout"><option value="title-content">Title and content</option><option value="title">Title slide</option><option value="two">Two columns</option><option value="quote">Quote</option><option value="section">Section divider</option><option value="blank">Blank</option></select></label><button id="applySlideLayout">Apply layout</button><label>Background <input type="color" id="slideBg" value="#ffffff" aria-label="Slide background colour"></label><label>Text size <select id="slideTextSize"><option value="16">Small</option><option value="20" selected>Regular</option><option value="26">Large</option><option value="32">Extra large</option></select></label><button id="slideImageBtn">Insert image</button><label>Transition <select id="showTransition"><option value="fade">Fade</option><option value="slide">Slide</option><option value="none">None</option></select></label></div>
+ <div class="presentation-workspace"><div id="slideRail" aria-label="Slides"></div><div class="slide-editor-wrap"><div id="slideCanvas" class="slide-canvas theme-light"><input id="slideTitle" aria-label="Slide title" placeholder="Slide title"><div id="slideBody" contenteditable="true" aria-label="Slide content" spellcheck="true"></div></div><textarea id="slideNotes" placeholder="Speaker notes (only visible while editing)" aria-label="Speaker notes"></textarea><div class="slide-status" id="slideStatus"></div></div></div>
+</div>
+<div id="sheetv" hidden class="spreadsheet-area">
+ <div class="sheet-tools"><button id="sheetAddRow">Add row</button><button id="sheetAddCol">Add column</button><button id="sheetDeleteRow">Delete row</button><button id="sheetDeleteCol">Delete column</button><button id="sheetRecalc">Recalculate</button><button id="sheetTemplateBtn">Change template</button><button id="sheetExport">Export CSV</button><span id="sheetNameLabel" class="mut"></span></div>
+ <div class="formula-row"><strong id="cellAddress">A1</strong><span class="mut">fx</span><input id="formulaInput" aria-label="Cell value or formula" placeholder="Enter a value or formula, e.g. =SUM(A1:A5)"></div>
+ <div class="sheet-grid-wrap"><table id="sheetGrid" aria-label="Spreadsheet grid"></table></div>
+ <div id="sheetStatus" class="sheet-status">Select a cell to edit its value or formula.</div>
+</div>
+<div id="posterv" hidden class="poster-studio">
+ <div class="poster-toolbar">
+  <label>Poster name <input id="posterName" type="text" value="Untitled poster"></label>
+  <button id="posterAddTitle">Add heading</button><button id="posterAddText">Add text</button>
+  <button id="posterAddRect">Rectangle</button><button id="posterAddCircle">Circle</button><button id="posterAddStar">Star</button>
+  <button id="posterAddImage">Add image</button>
+  <label>Text / shape colour <input id="posterColor" type="color" value="#26332b"></label>
+  <label>Background <input id="posterBackground" type="color" value="#fff3bd"></label>
+  <label>Text size <select id="posterTextSize"><option value="18">18</option><option value="24">24</option><option value="32" selected>32</option><option value="48">48</option><option value="64">64</option></select></label>
+  <button id="posterFront">Bring forward</button><button id="posterBack">Send backward</button><button id="posterDuplicate">Duplicate</button><button id="posterDelete">Delete selected</button><button id="posterExport" class="primary">Export PNG</button>
+ </div>
+ <div class="poster-options"><label>Canvas <select id="posterRatio"><option value="3 / 4">Portrait poster</option><option value="1 / 1">Square</option><option value="4 / 3">Landscape</option><option value="16 / 9">Wide banner</option></select></label><label><input type="checkbox" id="posterGrid" checked> Show grid</label><label><input type="checkbox" id="posterSnap" checked> Snap to grid</label><span class="mut" id="posterStatus">Select an object to edit it. Drag its handle to move it.</span></div>
+ <div class="poster-workspace"><div class="poster-canvas-wrap"><div id="posterCanvas" class="poster-canvas" tabindex="0" aria-label="Poster design canvas"></div></div><aside class="poster-properties"><h3>Selected object</h3><p class="mut" id="posterSelection">Nothing selected</p><label>Text <textarea id="posterTextValue" rows="4" placeholder="Select a text object"></textarea></label><label>Width <input id="posterObjectWidth" type="range" min="8" max="100" value="45"></label><label>Height <input id="posterObjectHeight" type="range" min="5" max="80" value="15"></label><p class="note">Drag the small Move bar on an object to reposition it. Edit text in the object or in this panel.</p></aside></div>
+</div>
+</div>
+<div id="filev" class="scroll" hidden><div class="fwrap">
+<h2>Files on this device</h2><p class="mut">Kept in your browser storage. Nothing is uploaded or downloaded.</p>
+<label id="drop" tabindex="0">Drop files here or <u>choose files</u><input id="pick" type="file" multiple hidden></label>
+<div id="flist"></div></div></div>
+<div id="camelliav" class="scroll" hidden><div id="camelliaMount"></div></div>
+</main>
+</div>
+<div id="modal" hidden><div id="mbox"></div></div>
+<input id="imagePick" type="file" accept="image/*" hidden><input id="posterImagePick" type="file" accept="image/*" hidden>
+<div id="oobe-screen" class="oobe-screen" hidden aria-live="polite"></div>
+<div id="authscreen" hidden>
+ <div class="auth-card"><div class="brand auth-brand">Flora</div><h1>Sign in</h1><p class="mut">Sign in to your local Flora workspace.</p><form id="loginForm"><label for="loginProfile">Profile</label><select id="loginProfile" required></select><label for="loginPassword">Password</label><input id="loginPassword" type="password" autocomplete="current-password" placeholder="Enter your profile password"><p class="auth-error" id="loginError" role="alert"></p><button class="primary" type="submit">Sign in</button></form><p class="note">Profiles are stored only in this browser on this device. A profile password is a local access check, not document encryption.</p></div>
+</div>
+<div id="showOverlay" hidden><div class="show-slide" id="showSlide"><h1 id="showTitle"></h1><div id="showBody"></div></div><div class="show-controls"><button id="showPrev">Previous</button><span id="showCounter"></span><button id="showNext">Next</button><button id="showExit">Exit presentation</button></div></div>
+<div id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+<script src="assets/js/classic-app.js" defer></script></body></html>
