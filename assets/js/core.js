@@ -67,7 +67,7 @@ export class FloraApp {
     this.store = new FloraStore();
     this.active = "home";
     this.cleanup = null;
-    this.settings = { theme: "warm", reducedMotion: false, compact: false };
+    this.settings = { theme: "warm", reducedMotion: false, compact: false, profileName: "My Workspace" };
   }
   async init(apps) {
     this.apps = apps;
@@ -78,7 +78,64 @@ export class FloraApp {
     document.querySelector("#mobile-menu").addEventListener("click", () => this.shell.classList.toggle("mobile-open"));
     document.querySelector("#theme-toggle").addEventListener("click", () => this.cycleTheme());
     await this.updateStorageEstimate();
-    this.open("home");
+    document.addEventListener("keydown", event => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "\\") { event.preventDefault(); this.toggleSidebar(); }
+      if (event.key === "Escape") this.shell.classList.remove("mobile-open");
+    });
+    const setupComplete = await this.store.get("setup-complete", false);
+    if (setupComplete) {
+      this.shell.hidden = false;
+      this.open("home");
+    } else {
+      this.renderSetup();
+    }
+  }
+  renderSetup() {
+    const host = document.querySelector("#oobe-screen");
+    this.shell.hidden = true;
+    host.hidden = false;
+    let step = 0;
+    let profileName = this.settings.profileName || "";
+    let theme = this.settings.theme || "warm";
+    let reducedMotion = !!this.settings.reducedMotion;
+    const finish = async (skip = false) => {
+      this.settings.profileName = (profileName.trim() || "My Workspace").slice(0, 40);
+      if (!skip) {
+        this.settings.theme = theme;
+        this.settings.reducedMotion = reducedMotion;
+      }
+      await this.saveSettings();
+      await this.store.set("setup-complete", true);
+      host.hidden = true;
+      this.shell.hidden = false;
+      this.applySettings();
+      await this.updateStorageEstimate();
+      this.open("home");
+      this.toast(`Welcome to Flora, ${this.settings.profileName}.`);
+    };
+    const render = () => {
+      const content = [
+        `<div class="oobe-content"><div class="oobe-visual"><div class="pixel-shapes" aria-hidden="true"><span class="shape-orbit"></span><span class="shape-square"></span><span class="bounce-triangle"></span><span class="bounce-circle"></span></div></div><span class="eyebrow">YOUR WORKSPACE STARTS HERE</span><h1>Welcome to Flora</h1><p class="muted">Six creative tools, one thoughtfully organised workspace. Let's get a few things ready.</p><div class="oobe-progress"><i class="active"></i><i></i><i></i></div><div class="oobe-actions"><button class="action-button" id="oobe-next">Get started</button><button class="quiet-button" id="oobe-skip">Skip setup</button></div></div>`,
+        `<div class="oobe-content"><div class="oobe-mini-brand">Flora</div><span class="eyebrow">STEP 2 OF 3</span><h1>Make it yours</h1><p class="muted">Choose a name for this local workspace. This stays in this browser.</p><label class="field-label oobe-field">Workspace name<input class="field" id="oobe-name" maxlength="40" value="${escapeHTML(profileName)}" placeholder="My Workspace" autocomplete="nickname"></label><div class="oobe-progress"><i class="done"></i><i class="active"></i><i></i></div><div class="oobe-actions"><button class="quiet-button" id="oobe-back">Back</button><button class="action-button" id="oobe-next">Continue</button></div></div>`,
+        `<div class="oobe-content"><div class="oobe-mini-brand">Flora</div><span class="eyebrow">STEP 3 OF 3</span><h1>Set your atmosphere</h1><p class="muted">You can change these preferences any time in Settings.</p><label class="field-label oobe-field">Colour theme<select class="field" id="oobe-theme"><option value="warm">Warm pastel yellow</option><option value="sage">Soft sage</option><option value="rose">Soft rose</option><option value="dark">Dark</option></select></label><label class="oobe-check"><input type="checkbox" id="oobe-motion" ${reducedMotion ? "checked" : ""}> Reduce animations and motion</label><div class="oobe-progress"><i class="done"></i><i class="done"></i><i class="active"></i></div><div class="oobe-actions"><button class="quiet-button" id="oobe-back">Back</button><button class="action-button" id="oobe-finish">Finish setup</button></div></div>`
+      ];
+      host.innerHTML = `<section class="oobe-screen-inner"><div class="oobe-card">${content[step]}</div><p class="oobe-footnote">Flora saves your work in this browser. Export important files regularly.</p></section>`;
+      if (step === 0) {
+        host.querySelector("#oobe-next").onclick = () => { step = 1; render(); };
+        host.querySelector("#oobe-skip").onclick = () => finish(true);
+      } else if (step === 1) {
+        host.querySelector("#oobe-name").oninput = e => { profileName = e.target.value; };
+        host.querySelector("#oobe-back").onclick = () => { step = 0; render(); };
+        host.querySelector("#oobe-next").onclick = () => { profileName = host.querySelector("#oobe-name").value; step = 2; render(); };
+      } else {
+        host.querySelector("#oobe-theme").value = theme;
+        host.querySelector("#oobe-theme").onchange = e => { theme = e.target.value; };
+        host.querySelector("#oobe-motion").onchange = e => { reducedMotion = e.target.checked; };
+        host.querySelector("#oobe-back").onclick = () => { step = 1; render(); };
+        host.querySelector("#oobe-finish").onclick = () => finish(false);
+      }
+    };
+    render();
   }
   async open(name) {
     if (this.cleanup) { this.cleanup(); this.cleanup = null; }
@@ -110,10 +167,11 @@ export class FloraApp {
       ["iris", "I", "Iris", "Build presentations and slide decks."],
       ["amaryllis", "S", "Amaryllis", "Organise data in spreadsheets."],
       ["lupine", "L", "Lupine", "Write and edit source code."],
-      ["anemone", "P", "Anemone", "Design posters and graphics."]
+      ["anemone", "P", "Anemone", "Design posters and graphics."],
+      ["camellia", "B", "Camellia", "Create booklets, workbooks and page-based publications."]
     ];
     this.workspace.innerHTML = `
-      <section class="hero"><div class="hero-inner"><div><span class="eyebrow">A WARMER WAY TO WORK</span><h1>Five creative tools.<br>One workspace.</h1><p>Meet Flora: a collection of focused tools for writing, presenting, organising data, coding and designing.</p></div><img class="hero-image" id="flora-hero-image" src="assets/images/flora-hero.jpg" alt="Flora floral website banner" hidden></div></section>
+      <section class="hero"><div class="hero-inner"><div><span class="eyebrow">A WARMER WAY TO WORK</span><h1>Six creative tools.<br>One workspace.</h1><p>Meet Flora: a collection of focused tools for writing, presenting, organising data, coding, designing and publishing.</p></div><div class="pixel-shapes home-shapes" aria-label="Animated Flora geometric shapes"><span class="shape-orbit"></span><span class="shape-square"></span><span class="bounce-triangle"></span><span class="bounce-circle"></span><span class="shape-dot"></span></div><img class="hero-image" id="flora-hero-image" src="assets/images/flora-hero.jpg" alt="Flora floral website banner" hidden></div></section>
       <div class="section-heading"><h2>Your workspace</h2><span class="muted">Choose an application to begin</span></div>
       <section class="app-grid">${cards.map(([id,letter,title,description]) => `<button class="app-card" data-card="${id}"><span class="app-letter">${letter}</span><strong>${title}</strong><small>${description}</small></button>`).join("")}</section>
       <div class="section-heading"><h2>Built around your work</h2></div>
@@ -127,15 +185,17 @@ export class FloraApp {
   renderSettings() {
     this.workspace.innerHTML = `
       <section class="panel"><span class="eyebrow">PREFERENCES</span><h2>Settings</h2><p class="muted">Choose how Flora looks and behaves in this browser.</p>
-        <div class="settings-tabs"><button class="active" data-setting-tab="appearance">Appearance</button><button data-setting-tab="accessibility">Accessibility</button><button data-setting-tab="storage">Storage & data</button><button data-setting-tab="privacy">Privacy</button></div>
+        <div class="settings-tabs"><button class="active" data-setting-tab="general">General</button><button data-setting-tab="appearance">Appearance</button><button data-setting-tab="accessibility">Accessibility</button><button data-setting-tab="storage">Storage & data</button><button data-setting-tab="privacy">Privacy</button></div>
         <div id="settings-content"></div>
       </section>`;
     const renderTab = tab => {
       const host = this.workspace.querySelector("#settings-content");
+      if (tab === "general") host.innerHTML = `<h3>Workspace setup</h3><p class="muted">Workspace: ${escapeHTML(this.settings.profileName || "My Workspace")}</p><button class="action-button secondary" id="restart-setup">Run welcome setup again</button><p class="muted">This will not delete documents or change your stored application data.</p>`;
       if (tab === "appearance") host.innerHTML = `<div class="form-grid"><label class="field-label">Colour theme<select class="field" id="setting-theme"><option value="warm">Warm yellow</option><option value="sage">Soft sage</option><option value="rose">Soft rose</option><option value="dark">Dark</option></select></label></div><p class="muted">The warm yellow theme is Flora's default appearance.</p>`;
       if (tab === "accessibility") host.innerHTML = `<label class="list-row"><span>Reduce motion</span><input type="checkbox" id="setting-motion" ${this.settings.reducedMotion ? "checked" : ""}></label><p class="muted">The interface also respects your operating-system reduced-motion preference.</p>`;
       if (tab === "storage") host.innerHTML = `<h3>Browser storage</h3><p class="muted" id="storage-details">Checking available browser storage…</p><div class="notice">Browser storage is controlled by the browser and device. An app setting cannot guarantee a fixed amount of disk space.</div><button class="action-button secondary" id="refresh-storage">Refresh estimate</button>`;
       if (tab === "privacy") host.innerHTML = `<h3>Local-first storage</h3><p class="muted">This starter build does not send your documents to a Flora server. Data remains in this browser unless you export or otherwise share it. Clearing site data may delete your work.</p>`;
+      const restart = host.querySelector("#restart-setup"); if (restart) restart.addEventListener("click", () => this.renderSetup());
       const theme = host.querySelector("#setting-theme"); if (theme) { theme.value = this.settings.theme; theme.addEventListener("change", async () => { this.settings.theme = theme.value; await this.saveSettings(); this.applySettings(); }); }
       const motion = host.querySelector("#setting-motion"); if (motion) motion.addEventListener("change", async () => { this.settings.reducedMotion = motion.checked; await this.saveSettings(); this.applySettings(); });
       const refresh = host.querySelector("#refresh-storage"); if (refresh) refresh.addEventListener("click", () => this.updateStorageEstimate());
@@ -144,7 +204,7 @@ export class FloraApp {
     this.workspace.querySelectorAll("[data-setting-tab]").forEach(button => button.addEventListener("click", () => {
       this.workspace.querySelectorAll("[data-setting-tab]").forEach(item => item.classList.toggle("active", item === button)); renderTab(button.dataset.settingTab);
     }));
-    renderTab("appearance");
+    renderTab("general");
   }
   async saveSettings() { await this.store.set("settings", this.settings); this.status.textContent = "Settings saved locally"; }
   applySettings() {
