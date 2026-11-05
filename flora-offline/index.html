@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7edca">
+  <meta name="description" content="Flora — a gentle, offline-first workspace for documents, spreadsheets and presentations.">
+  <title>Flora — your creative workspace</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true">✿</div>
+        <div><div class="brand-name">flora<span>.</span></div><div class="brand-caption">your creative workspace</div></div>
+      </div>
+      <button class="profile-switcher" id="profile-switcher" type="button" aria-label="Switch profile">
+        <span class="avatar" id="profile-avatar">F</span>
+        <span class="profile-switcher-copy"><strong id="profile-name">Your profile</strong><small id="profile-status">Local profile</small></span>
+        <span class="chevron">⌄</span>
+      </button>
+      <div class="sidebar-scroll">
+        <div class="nav-label">WORKSPACE</div>
+        <nav class="main-nav" aria-label="Main navigation">
+          <button class="nav-item active" data-view="home"><span class="nav-icon">⌂</span>Home</button>
+          <button class="nav-item" data-view="files"><span class="nav-icon">▤</span>Fern Files <span class="nav-count" id="file-count">0</span></button>
+          <button class="nav-item" data-view="shared"><span class="nav-icon">⌁</span>Shared with me</button>
+        </nav>
+        <div class="nav-label nav-label-spaced">CREATE</div>
+        <nav class="main-nav" aria-label="Create applications">
+          <button class="nav-item app-nav" data-app="daisy"><span class="app-glyph daisy">✿</span>Daisy Docs</button>
+          <button class="nav-item app-nav" data-app="poppy"><span class="app-glyph poppy">▦</span>Poppy Sheets</button>
+          <button class="nav-item app-nav" data-app="iris"><span class="app-glyph iris">▧</span>Iris Slides</button>
+          <button class="nav-item app-nav" data-app="clover"><span class="app-glyph clover">♣</span>Clover Notes</button>
+          <button class="nav-item app-nav" data-app="aster"><span class="app-glyph aster">✧</span>Aster Board</button>
+        </nav>
+        <div class="nav-label nav-label-spaced">MORE TOOLS</div>
+        <nav class="main-nav" aria-label="More tools">
+          <button class="nav-item" data-view="tasks"><span class="nav-icon">☑</span>Sage Tasks</button>
+          <button class="nav-item" data-view="focus"><span class="nav-icon">◷</span>Lily Focus</button>
+          <button class="nav-item" data-view="storage"><span class="nav-icon">▱</span>Flora Vault</button>
+        </nav>
+      </div>
+      <div class="sidebar-bottom">
+        <div class="storage-mini">
+          <div class="storage-mini-head"><span>Storage</span><strong id="storage-percent">0%</strong></div>
+          <div class="progress-track"><span id="storage-progress"></span></div>
+          <small id="storage-caption">Checking your space…</small>
+        </div>
+        <button class="nav-item settings-nav" data-view="settings"><span class="nav-icon">⚙</span>Settings</button>
+        <div class="sidebar-footer"><span class="offline-dot"></span>Stored on this device</div>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobile-menu" aria-label="Toggle navigation">☰</button>
+        <div class="breadcrumb"><span id="crumb-parent">Workspace</span><span class="crumb-slash">/</span><strong id="crumb-current">Home</strong></div>
+        <div class="topbar-actions">
+          <div class="online-status"><span class="offline-dot"></span><span>Offline ready</span></div>
+          <button class="icon-button" id="help-button" title="Help and shortcuts" aria-label="Help">?</button>
+          <button class="top-profile" id="top-profile" title="Profile"><span class="avatar avatar-small" id="top-avatar">F</span></button>
+        </div>
+      </header>
+      <div id="view-root" class="view-root"></div>
+    </main>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+
+  <template id="empty-template">
+    <div class="empty-state"><div class="empty-flower">✿</div><h3>Nothing has bloomed here yet</h3><p>Create something new and it will appear here.</p></div>
+  </template>
+  <script src="export-formats.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
