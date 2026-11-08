@@ -1,394 +1,64 @@
-# Flora
-
-**Flora is a local productivity suite containing five integrated applications for documents, presentations, spreadsheets, programming and graphic design.**
-
-Flora brings everyday productivity tools together in one application, with separate workspaces for each program.
-
----
-
-## Applications
-
-Flora currently contains five applications.
-
-### 1. Azalea — Document Editor
-
-Azalea is a rich-text document editor designed for writing, editing and organising information.
-
-**Features:**
-- Rich-text formatting.
-- Custom fonts and text sizes.
-- Text colouring and highlighting.
-- Headings and subheadings.
-- Bulleted and numbered lists.
-- Text alignment.
-- Tables and hyperlinks.
-- Image insertion.
-- Page breaks.
-- Checklists and footnotes.
-- Automatic saving.
-- Find and replace.
-- Word and character statistics.
-- Focus mode and zoom controls.
-- Document templates.
-
-**Available templates include:**
-- Blank document.
-- Research and class notes.
-- Formal reports.
-- Meeting minutes.
-- Business letters.
-- Project plans.
-- CVs and résumés.
-
-### 2. Iris — Presentation Designer
-
-Iris allows users to create and deliver slide-based presentations.
-
-**Features:**
-- Create and delete slides.
-- Duplicate slides.
-- Reorder slides.
-- Custom slide layouts.
-- Custom slide backgrounds.
-- Multiple presentation themes.
-- Custom text sizes.
-- Image insertion.
-- Slide transitions.
-- Full-screen presentation mode.
-- Keyboard navigation.
-- Presentation export.
-
-**Available themes:**
-- Light.
-- Dark.
-- Blue.
-- Warm.
-- Minimal.
-- High contrast.
-
-**Available templates include:**
-- Clean starter presentation.
-- Project pitch.
-- Lesson or lecture.
-- Business report.
-- Portfolio showcase.
-
-### 3. Amaryllis — Spreadsheet Editor
-
-Amaryllis provides a simple spreadsheet workspace for organising information and performing calculations.
-
-**Features:**
-- Editable spreadsheet cells.
-- Rows and columns.
-- Formula input.
-- Automatic formula recalculation.
-- Add and remove rows.
-- Add and remove columns.
-- CSV export.
-
-**Supported basic formulas:**
-- Arithmetic calculations.
-- SUM
-- AVERAGE
-- MIN
-- MAX
-- COUNT
-- COUNTA
-
-**Available templates include:**
-- Blank workbook.
-- Monthly budget.
-- Task tracker.
-- Inventory list.
-- Gradebook.
-- Weekly schedule.
-
-### 4. Lupine — Code Editor
-
-Lupine is Flora's built-in programming and scripting editor.
-
-**Features:**
-- Syntax highlighting.
-- Programming language selection.
-- Automatic file extension adjustment.
-- Line numbers.
-- Configurable indentation.
-- Automatic indentation.
-- Optional line wrapping.
-- Code copying.
-- Code export.
-
-**Supported languages:**
-- Python
-- JavaScript
-- TypeScript
-- Java
-- C
-- C#
-- C++
-- Go
-- Rust
-- Ruby
-- PHP
-- Lua
-- Shell
-- SQL
-- JSON
-- Plain text
+# Flora — offline-first creative workspace
 
-### 5. Anemone — Poster Studio
+Flora is a dependency-free HTML, CSS and JavaScript workspace for local documents, spreadsheets, presentations, notes, boards and utilities. It stores profiles and files in this browser using IndexedDB (with a localStorage fallback). There is no Flora account, cloud file store or analytics endpoint.
 
-Anemone is a poster and graphic-design workspace built around positioned objects.
-
-**Features:**
-- Drag-and-drop text objects.
-- Drag-and-drop images.
-- Rectangles, circles and stars.
-- Custom object colours.
-- Custom poster backgrounds.
-- Object positioning.
-- Object resizing.
-- Object selection.
-- Layer ordering.
-- Duplicate and delete objects.
-- Grid visibility.
-- Snap-to-grid.
-- PNG export.
+## Run Flora
 
-**Available templates include:**
-- Blank canvas.
-- Event announcement.
-- Sale or promotion.
-- School project.
-- Wide information banner.
+1. Extract `Flora-Offline.zip`.
+2. Open a terminal in the `flora-offline` folder.
+3. Run `python3 -m http.server 8000`.
+4. Open `http://localhost:8000`.
 
----
+For Amethyst on a local network, start the server with `python3 -m http.server 8000 --bind 0.0.0.0`, then let other devices on the same network open `http://<host-lan-ip>:8000`. Use your computer's LAN address, not its public address. Firewall rules may need to allow local TCP port 8000.
 
-## Home Dashboard
+## First-run setup
 
-Flora includes a central home dashboard that provides access to its applications and workspace information.
+The first-run wizard has four steps: local profile and cursor colour, workspace appearance and navigation density, virtual storage cap, and a local privacy review. Names, cursor colours, bios and optional pronouns can be edited later from Profile settings by opening the profile menu and selecting Edit current profile.
 
-The dashboard includes:
-- Application navigation.
-- Recent documents.
-- Storage information.
-- Usage statistics.
-- Quick access to settings.
-- Profile information.
+## Built-in applications
 
-The sidebar can be expanded or collapsed. When collapsed, storage usage is displayed using a circular indicator.
+- **Azalea Docs** — page-centred rich-text editor, formatting ribbon, headings, lists, alignment and document exports.
+- **Amaryllis Sheets** — editable cells, CSV import/export, row/column expansion, cell references and basic arithmetic / `SUM(A1:A5)` formulas.
+- **Iris Presentations** — title-and-body slides, slide ordering and presentation exports.
+- **Anemone Notes** — quick plain-text notes.
+- **Dahlia Boards** — lightweight sticky-note idea boards.
+- **My files** — search, filter, open, rename, import, export and delete local files.
 
----
+## Tools
 
-## Storage System
+- **Amethyst** — direct browser-to-browser Flora file transfer using WebRTC data channels. The sender creates an offer code; the receiver pastes it and creates an answer code; the sender applies that answer. Files are transferred directly in chunks and saved to the receiver's My files library.
+- **Rowan Tasks** — local checklist.
+- **Camellia Focus** — focus and break timer.
+- **Flora Storage** — local usage and storage cap overview.
 
-Flora provides configurable local storage allowances.
+### Amethyst network requirements
 
-Every available storage setting is free.
+Amethyst is designed for two users on the same local network. It uses host ICE candidates only (`iceServers: []`), so there is no external STUN/TURN service or cloud relay. Users must exchange offer/answer codes themselves, for example through a local chat. It does not automatically discover other devices. Both browsers must support `RTCPeerConnection` and permit WebRTC on the Flora origin; some browsers restrict peer connections on plain HTTP LAN origins, in which case a trusted HTTPS local deployment may be required. Treat offer and answer codes as private connection invitations and share them only with the intended recipient. The WebRTC data channel is protected by the browser transport, but Amethyst does not add account-based identity verification or approval prompts.
 
-**Available storage limits:**
+The local-network server command serves Flora files; it is not a permanent file relay. The transferred file travels over the peer connection and is written to the receiver's local browser database. Cross-network transfers would require additional ICE/STUN/TURN infrastructure and are not part of this offline build.
 
-| Category | Options |
-|---|---|
-| Kilobytes | 35 KB, 50 KB, 350 KB, 500 KB, 750 KB |
-| Megabytes | 1 MB, 2 MB, 5 MB, 10 MB, 25 MB, 50 MB, 75 MB, 100 MB, 150 MB, 250 MB, 350 MB, 500 MB, 750 MB |
-| Gigabytes | 1 GB, 2 GB, 3 GB, 4 GB, 6 GB, 8 GB, 12 GB, 16 GB, 24 GB, 32 GB, 48 GB, 64 GB, 96 GB, 128 GB, 192 GB, 256 GB, 512 GB |
-| Terabytes | 1 TB |
+## Profiles and collaboration
 
-Storage is configured using a slider rather than a traditional selection menu.
+Profiles are local labels inside the same browser database, not separate operating-system accounts and not password-protected. The profile menu allows switching, creating and editing profiles. Pronouns and bios are optional.
 
-**Important:** These values represent Flora's application storage limits. Actual available storage depends on browser and device restrictions. Selecting a larger allowance does not guarantee that the browser can physically allocate that amount.
+The existing collaborative editor syncs open files and broadcasts participant presence between tabs/windows on the same browser origin using `BroadcastChannel`. It shows full first names, favourite cursor colours, activity labels, and on-page cursors for document text selections (plus cell focus indicators in sheets). It is not a cloud collaboration service: separate devices and separate browsers do not share the IndexedDB workspace automatically. Amethyst transfers copies of files; it does not provide simultaneous remote editing.
 
----
+Updates still use whole-file replacement (last update wins), not a conflict-free CRDT. Avoid concurrent edits to the same text range when testing multiple tabs.
 
-## Usage Tracker
+## Storage limits
 
-Flora includes a local usage tracker that records storage snapshots and application activity.
+Flora offers configurable logical caps in KB, MB or GB using powers of two beginning at 16 (16, 32, 64, 128, …). Choices are bounded by the browser's reported site-storage quota where available. The cap does not reserve disk space. Browser quota differs by browser/device and can be reduced by other site data. The storage bar animates newly added usage in blue before merging it into the warm base bar. Export important work regularly.
 
-It provides three views:
+## Export formats
 
-- **Hourly:** Recent activity across 24 hourly periods.
-- **Daily:** Activity across 30 daily periods.
-- **Monthly:** Activity across 12 monthly periods.
+- Azalea Docs: `.docx` (native Open XML), `.html`, `.doc` (HTML-based Word compatibility), `.txt`, `.md`.
+- Amaryllis Sheets: `.xlsx` (native Open XML), `.csv`, `.json`, `.html`.
+- Iris Presentations: `.pptx` (native Open XML), `.html`, `.json`.
+- Anemone Notes: `.txt`, `.md`, `.html`.
+- Dahlia Boards: `.json`, `.html`.
 
-Usage information includes:
-- Latest recorded storage usage.
-- Recorded storage changes.
-- Number of recorded activity events.
-- Historical usage charts.
+Office exports are dependency-free and intentionally lightweight. `.docx` preserves basic paragraphs, headings and inline emphasis. `.xlsx` preserves cell values and basic formulas but not charts, pivot tables or advanced formatting. `.pptx` exports title-and-body slides with a simple theme; it does not include animations, transitions or embedded media.
 
-Tracking can be disabled in Settings.
+## Offline behaviour and data
 
-The tracker is based on recorded application activity, not continuous operating-system monitoring.
-
----
-
-## Profiles and Security
-
-Flora supports multiple local user profiles.
-
-Each profile can have:
-- Its own documents.
-- Its own files.
-- Its own password.
-- Its own sign-in session.
-
-The main profile acts as the administrator.
-
-Administrators can:
-- Create additional profiles.
-- Enable or disable shared storage.
-- Configure application presets.
-- Manage the global storage allowance.
-
-When shared storage is enabled, profiles share the same storage allowance without sharing their documents.
-
-Passwords are checked using salted PBKDF2 password hashing through the browser's Web Crypto API.
-
-**Security limitation:** Profile passwords provide a local sign-in restriction, not document encryption. Documents and files are not encrypted at rest.
-
----
-
-## Settings
-
-Flora provides a categorised settings panel.
-
-Current categories include:
-
-| Category | Purpose |
-|---|---|
-| General | General application preferences |
-| Appearance | Themes, colours and interface appearance |
-| Accessibility | Text size, contrast and accessibility preferences |
-| Storage | Storage allowance and usage |
-| Profiles | Local profiles and profile management |
-| Security | Local password protection information |
-| Applications | Application presets and defaults |
-| Lupine | Programming language and code-editor preferences |
-| Presentations | Default presentation appearance and transitions |
-| Poster Studio | Poster backgrounds and design preferences |
-| Backup and Data | Profile backup |
-| Privacy | Usage tracking and activity history |
-
-### Accessibility
-
-Accessibility options include:
-- Larger interface text.
-- High-contrast mode.
-- Reduced motion.
-- Screen-reader support preferences.
-- Spell-check controls.
-
-### Application Presets
-
-The administrator can select one of three presets:
-
-- Personal Use
-- Family Use
-- Enterprise Use
-
-These presets adjust selected application preferences. They do not provide cloud-based administration or enterprise identity management.
-
----
-
-## How Flora Works
-
-Flora is a browser-based application built using:
-
-- HTML
-- CSS
-- JavaScript
-- IndexedDB
-- Local Storage
-- Web Crypto API
-- Canvas API
-
-The application runs within the browser rather than requiring a traditional desktop installation.
-
-### Local Data Storage
-
-Flora uses IndexedDB to store documents and files on the device.
-
-Local Storage is used for application preferences, profiles and usage history.
-
-This means:
-- No Flora cloud account is required.
-- Documents are stored locally.
-- Profiles are local to the browser.
-- Documents are not automatically synchronised between devices.
-- Clearing browser data can delete locally stored content.
-
-Users should regularly create backups of important work.
-
-### Exports
-
-Flora supports different export formats depending on the application.
-
-**Azalea:**
-PDF, DOCX, EPUB, HTML, Markdown, TXT, JSON, CSV and ZIP.
-
-**Iris:**
-HTML presentation export.
-
-**Amaryllis:**
-CSV export.
-
-**Lupine:**
-Programming-language-specific source files and additional code formats.
-
-**Anemone:**
-PNG poster export.
-
----
-
-## Installation and Usage
-
-Flora is distributed as an HTML application.
-
-1. Download or clone the repository.
-2. Locate the main `Flora.html` application.
-3. Open it in a supported modern browser.
-4. Sign in to your local profile.
-5. Select an application from the sidebar.
-6. Start creating.
-
-Some browser environments may require a compatible download integration for file exports. Browser storage and Web Crypto capabilities also depend on the browser context.
-
----
-
-## Privacy
-
-Flora is designed around local storage.
-
-The current application does not provide:
-- Cloud document synchronisation.
-- Online user accounts.
-- Automatic remote backups.
-- Real-time collaboration.
-- Encrypted document storage.
-
-Your locally stored documents remain associated with the browser and device in which they were created.
-
-For important documents, maintain external backups.
-
----
-
-## Project Information
-
-**Project:** Flora  
-**Applications:** Azalea, Iris, Amaryllis, Lupine and Anemone  
-**Platform:** Browser-based  
-**Architecture:** Client-side HTML, CSS and JavaScript  
-**Storage:** IndexedDB and Local Storage  
-**Default Theme:** Warm pastel yellow  
-**Default Document Font:** Newsreader
-
----
-
-## Development Status
-
-Flora is an evolving productivity suite. Features and application functionality may change as development continues.
-
-Suggestions, bug reports and feature requests are welcome.
-
-**Flora — Five creative tools. One workspace.**
+All application code and assets are local. When served from `localhost` or HTTPS, `sw.js` caches the static app shell for offline visits. The CSS requests Newsreader by name and falls back to Georgia if Newsreader is not installed locally; no remote font file is downloaded. Files, profiles, settings and tasks stay in this browser's database. Clearing browser site data can remove your workspace; export important files for backup.

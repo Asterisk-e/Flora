@@ -16,11 +16,11 @@
     return `${n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1) : n.toFixed(2)} ${units[i]}`;
   };
   const fileInfo = {
-    doc: { label:'Daisy Docs', short:'Document', icon:'✿', color:'#f5e7bb', extensions:['docx','html','doc','txt','md'] },
-    sheet: { label:'Poppy Sheets', short:'Spreadsheet', icon:'▦', color:'#f1dfd7', extensions:['xlsx','csv','json','html'] },
-    slides: { label:'Iris Slides', short:'Presentation', icon:'▧', color:'#e5e3ef', extensions:['pptx','html','json'] },
-    note: { label:'Clover Notes', short:'Note', icon:'♣', color:'#e4eadc', extensions:['txt','md','html'] },
-    board: { label:'Aster Board', short:'Board', icon:'✧', color:'#eae2ee', extensions:['json','html'] }
+    doc: { label:'Azalea Docs', short:'Document', icon:'', color:'#f5e7bb', extensions:['docx','html','doc','txt','md'] },
+    sheet: { label:'Amaryllis Sheets', short:'Spreadsheet', icon:'', color:'#f1dfd7', extensions:['xlsx','csv','json','html'] },
+    slides: { label:'Iris Presentations', short:'Presentation', icon:'', color:'#e5e3ef', extensions:['pptx','html','json'] },
+    note: { label:'Anemone Notes', short:'Note', icon:'', color:'#e4eadc', extensions:['txt','md','html'] },
+    board: { label:'Dahlia Boards', short:'Board', icon:'', color:'#eae2ee', extensions:['json','html'] }
   };
   const appTypes = ['doc','sheet','slides','note','board'];
   const defaultSettings = {
@@ -45,11 +45,22 @@
   let selectedCell = { row:1, col:1 };
   let peers = new Map();
   let channel = null;
+  let presenceTimer = null;
+  let lastPresenceAction = 'viewing';
+  let lastPresenceActivityAt = 0;
   let focusTimer = null;
   let focusSeconds = 25 * 60;
   let focusRunning = false;
   let focusMode = 'focus';
   let boardSaveTimer = null;
+  let lastStoragePercent = null;
+  let amethystPeer = null;
+  let amethystChannel = null;
+  let amethystSendingFile = null;
+  let amethystReceiveParts = [];
+  let amethystReceiveBytes = 0;
+  let amethystExpectedBytes = 0;
+  let amethystTransferStarted = false;
 
   // IndexedDB storage with a localStorage fallback for older/restricted browsers.
   function openDB() {
@@ -151,6 +162,10 @@
     document.body.classList.toggle('high-contrast', !!settings.highContrast);
     document.body.classList.toggle('reduce-motion', !!settings.reduceMotion);
     document.documentElement.style.setProperty('--accent', settings.accent || defaultSettings.accent);
+    document.body.classList.toggle('compact-sidebar', !!settings.compactMode);
+    const compactButton=$('#sidebar-compact-toggle');
+    compactButton?.setAttribute('aria-pressed', String(!!settings.compactMode));
+    if(compactButton)compactButton.textContent=settings.compactMode?'Expand':'Compact';
   }
   function toast(message, kind = '') {
     const el = document.createElement('div');
@@ -168,12 +183,13 @@
     $('#top-avatar').textContent = currentProfileInitial();
     $('#profile-avatar').style.setProperty('--avatar-color', profile.color);
     $('#top-avatar').style.setProperty('--avatar-color', profile.color);
-    $('#profile-status').textContent = profile.pronouns ? profile.pronouns : 'Local profile';
+    $('#profile-status').textContent = 'Local profile';
   }
   function updateNav() {
     $('#file-count').textContent = String(files.length);
     $$('.nav-item').forEach(button => button.classList.remove('active'));
     if (currentApp) $(`[data-app="${currentApp}"]`)?.classList.add('active');
+    else if (currentView === 'amethyst') $('[data-view="tools"]')?.classList.add('active');
     else $(`[data-view="${currentView}"]`)?.classList.add('active');
   }
   async function updateStorageUI() {
@@ -181,8 +197,29 @@
     const limit = settings.storageLimitBytes || usage || 1;
     const percent = Math.min(100, Math.round(usage / limit * 100));
     $('#storage-percent').textContent = `${percent}%`;
-    $('#storage-progress').style.width = `${percent}%`;
     $('#storage-caption').textContent = `${formatBytes(usage)} of ${formatBytes(limit)} used`;
+    const base = $('#storage-progress');
+    const added = $('#storage-progress-new');
+    if (base) {
+      const previous = lastStoragePercent;
+      if (previous !== null && percent > previous && added) {
+        base.style.width = `${previous}%`;
+        added.style.left = `${previous}%`;
+        added.style.width = `${percent - previous}%`;
+        added.classList.add('visible');
+        clearTimeout(window._floraStorageSettle);
+        window._floraStorageSettle = setTimeout(() => {
+          base.style.width = `${percent}%`;
+          added.style.width = '0%';
+          added.style.left = `${percent}%`;
+          added.classList.remove('visible');
+        }, 900);
+      } else {
+        base.style.width = `${percent}%`;
+        if (added) { added.style.width = '0%'; added.classList.remove('visible'); }
+      }
+    }
+    lastStoragePercent = percent;
   }
   function setBreadcrumb(parent, current) {
     $('#crumb-parent').textContent = parent;
@@ -224,6 +261,7 @@
     if (!(await canStore(file))) return;
     files.push(file);
     await putRecord('files', file);
+    updateStorageUI();
     toast(`${file.name} created`, 'success');
     openFile(file.id);
   }
@@ -265,82 +303,251 @@
   }
   function getRecentFiles(limit = 5) { return [...files].sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt)).slice(0,limit); }
   function appCard(type, title, desc) {
-    const info = fileInfo[type];
-    return `<button class="app-card" data-create="${type}"><span class="tiny-arrow">↗</span><span class="app-card-glyph" style="background:${info.color}">${info.icon}</span><strong>${title}</strong><small>${desc}</small></button>`;
+    return `<button class="app-card" data-create="${type}"><span class="app-card-kicker">FLORA APP</span><strong>${title}</strong><small>${desc}</small><span class="card-open-label">Open workspace</span></button>`;
   }
-  function fileIcon(file) { return `<span class="file-type-icon" style="background:${fileInfo[file.type]?.color || '#f2eddc'}">${fileInfo[file.type]?.icon || '▤'}</span>`; }
+  function fileIcon(file) { return `<span class="file-type-label">${esc(fileInfo[file.type]?.short || 'File')}</span>`; }
   function fileRow(file) {
-    return `<div class="file-row" data-file-row="${file.id}">${fileIcon(file)}<div class="file-row-copy"><strong>${esc(file.name)}</strong><small>${fileInfo[file.type]?.label || 'Flora file'} · Edited ${prettyDate(file.updatedAt)}</small></div><span class="tag">${fileInfo[file.type]?.short || 'File'}</span><div class="file-row-actions"><button data-open="${file.id}" aria-label="Open ${esc(file.name)}">Open ↗</button><button data-export="${file.id}" aria-label="Export ${esc(file.name)}">↓</button></div></div>`;
+    return `<div class="file-row" data-file-row="${file.id}">${fileIcon(file)}<div class="file-row-copy"><strong>${esc(file.name)}</strong><small>${fileInfo[file.type]?.label || 'Flora file'} · Edited ${prettyDate(file.updatedAt)}</small></div><span class="tag">${fileInfo[file.type]?.short || 'File'}</span><div class="file-row-actions"><button data-open="${file.id}" aria-label="Open ${esc(file.name)}">Open</button><button data-export="${file.id}" aria-label="Export ${esc(file.name)}">Export</button></div></div>`;
+  }
+  function toolCard(title, description, label, view) {
+    return `<button class="tool-card" data-view="${view}"><span class="tool-card-kicker">${label}</span><strong>${title}</strong><small>${description}</small><span class="card-open-label">Open tool</span></button>`;
   }
   function renderHome() {
     setBreadcrumb('Workspace','Home');
     const dayLabel = new Intl.DateTimeFormat(undefined,{weekday:'long'}).format(new Date()).toUpperCase();
-    const recent = getRecentFiles(5);
+    const recent = getRecentFiles(6);
     const docs = files.filter(f => f.type === 'doc').length;
     const sheets = files.filter(f => f.type === 'sheet').length;
     const presentations = files.filter(f => f.type === 'slides').length;
     $('#view-root').innerHTML = `
-      <div class="welcome-row"><div><div class="page-kicker">${dayLabel}, YOUR WAY</div><h1 class="page-title">A little room to bloom, ${esc(profile.name.split(' ')[0])}.</h1><p class="page-subtitle">Your ideas, plans and projects — all in one peaceful place.</p></div><div class="welcome-actions"><button class="btn btn-secondary" data-action="import">＋ Import file</button><button class="btn btn-primary" data-create="doc">✿ New document</button></div></div>
-      <section class="hero-card"><div class="hero-copy"><div class="hero-eyebrow">A CALMER KIND OF PRODUCTIVITY</div><h2 class="hero-title">Make something meaningful today.</h2><p>Write a thought, shape a plan, or bring an idea to life. Flora keeps your work close and on your device.</p></div><button class="btn hero-cta" data-action="explore">Explore your tools ↗</button></section>
-      <div class="quick-stats"><div class="stat-card"><div class="stat-label">All your files</div><div class="stat-value">${files.length}</div><div class="stat-note">Saved in your local Flora space</div></div><div class="stat-card"><div class="stat-label">Documents & notes</div><div class="stat-value">${docs + files.filter(f=>f.type==='note').length}</div><div class="stat-note">A home for your words</div></div><div class="stat-card"><div class="stat-label">Sheets & slides</div><div class="stat-value">${sheets + presentations}</div><div class="stat-note">Ideas with a little structure</div></div></div>
-      <div class="section-heading"><div><h2>Start creating</h2><p>Each workspace has its own little speciality.</p></div></div>
-      <div class="app-grid">${appCard('doc','Daisy Docs','Write & format')}${appCard('sheet','Poppy Sheets','Tables & formulas')}${appCard('slides','Iris Slides','Present your ideas')}${appCard('note','Clover Notes','Quick thoughts')}${appCard('board','Aster Board','Sticky-note canvas')}</div>
-      <div class="section-heading"><div><h2>Recently opened</h2><p>Pick up where you left off.</p></div><button class="text-link" data-view="files">All files ↗</button></div>
-      <div class="recent-list">${recent.length ? recent.map(fileRow).join('') : `<div class="empty-state"><div class="empty-flower">✿</div><h3>Your first creation is waiting</h3><p>Start with a document, spreadsheet, presentation or note. Your work is saved locally.</p></div>`}</div>`;
+      <section class="home-intro">
+        <div><div class="page-kicker">${dayLabel} / YOUR WORKSPACE</div><h1 class="page-title">Good to see you, ${esc(profile.name.split(' ')[0])}.</h1><p class="page-subtitle">A focused space for documents, plans, data and ideas.</p></div>
+        <div class="welcome-actions"><button class="btn btn-secondary" data-action="import">Import file</button><button class="btn btn-primary" data-create="doc">Create document</button></div>
+      </section>
+      <section class="home-hero"><div class="home-hero-copy"><div class="hero-eyebrow">YOUR WORKSPACE, AT YOUR PACE</div><h2>Make space for your next good idea.</h2><p>Everything you create is saved locally in this browser. Start with a blank page or return to a recent project.</p><button class="btn btn-primary" data-view="tools">Explore tools</button></div><div class="hero-side-note"><span>FLORA / LOCAL WORKSPACE</span><strong>${files.length.toString().padStart(2,'0')}</strong><small>saved files</small></div></section>
+      <div class="quick-stats"><div class="stat-card"><div class="stat-label">All files</div><div class="stat-value">${files.length}</div><div class="stat-note">Saved in your local workspace</div></div><div class="stat-card"><div class="stat-label">Documents and notes</div><div class="stat-value">${docs + files.filter(f=>f.type==='note').length}</div><div class="stat-note">Writing and quick capture</div></div><div class="stat-card"><div class="stat-label">Sheets and presentations</div><div class="stat-value">${sheets + presentations}</div><div class="stat-note">Structured work and ideas</div></div></div>
+      <div class="section-heading"><div><h2>Create something</h2><p>Choose a workspace to get started.</p></div></div>
+      <div class="app-grid">${appCard('doc','Azalea Docs','Write, format and export documents')}${appCard('sheet','Amaryllis Sheets','Tables, calculations and data')}${appCard('slides','Iris Presentations','Build clear presentations')}${appCard('note','Anemone Notes','Capture quick thoughts')}${appCard('board','Dahlia Boards','Arrange ideas on a canvas')}</div>
+      <div class="section-heading"><div><h2>Recent files</h2><p>Continue where you left off.</p></div><button class="text-link" data-view="files">View all files</button></div>
+      <div class="recent-list">${recent.length ? recent.map(fileRow).join('') : `<div class="empty-state"><h3>Your workspace is ready</h3><p>Create a document, spreadsheet, presentation or note. Your work is saved on this device.</p></div>`}</div>`;
   }
   function renderAppLanding(type) {
     const info = fileInfo[type];
     const matching = getRecentFiles(50).filter(file => file.type === type);
     setBreadcrumb('Create', info.label);
-    $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">FLORA APPLICATION</div><h1 class="page-title">${info.icon} ${info.label}</h1><p class="page-subtitle">${type==='doc'?'A thoughtful space for writing and shaping your words.':type==='sheet'?'Organise information, calculate totals and explore your data.':type==='slides'?'Turn your ideas into a clear, lovely presentation.':type==='note'?'Capture quick thoughts before they float away.':'Pin ideas, collect inspiration and map out a project.'}</p></div><button class="btn btn-primary" data-create="${type}">＋ Create ${info.short.toLowerCase()}</button></div>
-    <div class="panel"><div class="section-heading" style="margin-top:0"><div><h2>Your ${info.short.toLowerCase()}s</h2><p>Saved locally on this device.</p></div></div>${matching.length ? `<div class="recent-list">${matching.map(fileRow).join('')}</div>` : `<div class="empty-state"><div class="empty-flower">${info.icon}</div><h3>No ${info.short.toLowerCase()}s yet</h3><p>Create your first one to get started.</p><button class="btn btn-primary" data-create="${type}" style="margin-top:15px">Create ${info.short}</button></div>`}</div>`;
+    const description = type==='doc'?'A page-focused writing workspace with familiar formatting controls.':type==='sheet'?'Organise information, calculate totals and inspect your data.':type==='slides'?'Turn an outline into a clear presentation.':type==='note'?'Keep short notes and working thoughts close at hand.':'Arrange ideas, references and plans on a freeform board.';
+    $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">FLORA APPLICATION</div><h1 class="page-title">${info.label}</h1><p class="page-subtitle">${description}</p></div><button class="btn btn-primary" data-create="${type}">Create ${info.short.toLowerCase()}</button></div>
+    <div class="panel"><div class="section-heading" style="margin-top:0"><div><h2>Your ${info.short.toLowerCase()}s</h2><p>Saved locally on this device.</p></div></div>${matching.length ? `<div class="recent-list">${matching.map(fileRow).join('')}</div>` : `<div class="empty-state"><h3>No ${info.short.toLowerCase()}s yet</h3><p>Create your first one to get started.</p><button class="btn btn-primary" data-create="${type}" style="margin-top:15px">Create ${info.short}</button></div>`}</div>`;
   }
   function renderFiles(filter = '') {
-    setBreadcrumb('Workspace','Fern Files');
+    setBreadcrumb('Workspace','My files');
     const query = filter.toLowerCase();
     const visible = [...files].sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt)).filter(f => f.name.toLowerCase().includes(query) || fileInfo[f.type].label.toLowerCase().includes(query));
-    $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">YOUR LOCAL LIBRARY</div><h1 class="page-title">Fern Files</h1><p class="page-subtitle">Everything you make in Flora, kept together and under your control.</p></div><div class="welcome-actions"><button class="btn btn-secondary" data-action="import">＋ Import</button><button class="btn btn-primary" data-action="new-file">＋ New file</button></div></div>
+    $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">YOUR LOCAL LIBRARY</div><h1 class="page-title">My files</h1><p class="page-subtitle">Everything you make in Flora, kept together and under your control.</p></div><div class="welcome-actions"><button class="btn btn-secondary" data-action="import">Import file</button><button class="btn btn-primary" data-action="new-file">New file</button></div></div>
       <div class="toolbar-row"><div class="search-field"><input id="file-search" type="search" placeholder="Search your files…" value="${esc(filter)}" aria-label="Search files"></div><div style="display:flex;gap:7px"><select id="file-filter" class="select-control" aria-label="Filter by type"><option value="all">All types</option>${appTypes.map(type=>`<option value="${type}">${fileInfo[type].short}s</option>`).join('')}</select><button class="btn btn-secondary btn-small" data-action="import">Import file</button></div></div>
-      <div id="file-list-region">${visible.length ? `<div class="file-grid">${visible.map(file=>`<div class="file-card"><div class="file-card-head">${fileIcon(file)}<button class="btn btn-ghost btn-small" data-menu-file="${file.id}" title="File options">•••</button></div><div class="file-card-title" title="${esc(file.name)}">${esc(file.name)}</div><div class="file-card-meta">${fileInfo[file.type].short} · ${prettyDate(file.updatedAt)}</div><div class="file-card-actions"><button class="btn btn-secondary btn-small" data-open="${file.id}">Open</button><button class="btn btn-ghost btn-small" data-export="${file.id}">Export ↓</button></div></div>`).join('')}</div>` : `<div class="panel"><div class="empty-state"><div class="empty-flower">✿</div><h3>${filter ? 'No matching files' : 'Your library is ready'}</h3><p>${filter ? 'Try a different search.' : 'Create your first file or import an existing one.'}</p></div></div>`}</div>`;
+      <div id="file-list-region">${visible.length ? `<div class="file-grid">${visible.map(file=>`<div class="file-card"><div class="file-card-head">${fileIcon(file)}<button class="btn btn-ghost btn-small" data-menu-file="${file.id}" title="File options">Options</button></div><div class="file-card-title" title="${esc(file.name)}">${esc(file.name)}</div><div class="file-card-meta">${fileInfo[file.type].short} · ${prettyDate(file.updatedAt)}</div><div class="file-card-actions"><button class="btn btn-secondary btn-small" data-open="${file.id}">Open</button><button class="btn btn-ghost btn-small" data-export="${file.id}">Export</button></div></div>`).join('')}</div>` : `<div class="panel"><div class="empty-state"><h3>${filter ? 'No matching files' : 'Your library is ready'}</h3><p>${filter ? 'Try a different search.' : 'Create your first file or import an existing one.'}</p></div></div>`}</div>`;
   }
   function renderShared() {
     const shared = files.filter(file => (file.collaborators || []).includes(profile.id) || file.ownerId !== profile.id);
     setBreadcrumb('Workspace','Shared with me');
-    $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">COLLABORATION</div><h1 class="page-title">Shared with me</h1><p class="page-subtitle">Files shared through your local Flora workspace.</p></div></div><div class="panel"><div class="collab-explainer"><strong>Local collaboration:</strong> Flora can sync open files and show collaborator cursors between tabs or windows using the same browser profile and local address. It does not connect people across the internet or different devices without a separate server.</div>${shared.length ? `<div class="recent-list">${shared.map(fileRow).join('')}</div>` : `<div class="empty-state"><div class="empty-flower">⌁</div><h3>No shared files yet</h3><p>Open a file, choose Collaborate, then open the same local Flora address in another tab and select a different local profile.</p></div>`}</div>`;
+    $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">COLLABORATION</div><h1 class="page-title">Shared with me</h1><p class="page-subtitle">Files shared through your local Flora workspace.</p></div></div><div class="panel"><div class="collab-explainer"><strong>Local collaboration:</strong> Flora can sync open files and show collaborator cursors between tabs or windows using the same browser profile and local address. It does not connect people across the internet or different devices without a separate server.</div>${shared.length ? `<div class="recent-list">${shared.map(fileRow).join('')}</div>` : `<div class="empty-state"><h3>No shared files yet</h3><p>Open a file, choose Collaborate, then open the same local Flora address in another tab and select a different local profile.</p></div>`}</div>`;
   }
   function renderStorage() {
-    setBreadcrumb('More tools','Flora Vault');
+    setBreadcrumb('Tools','Flora Storage');
     const usage = localDataSize();
     const limit = settings.storageLimitBytes;
     const estimatePromise = storageEstimate();
-    $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">LOCAL STORAGE</div><h1 class="page-title">Flora Vault</h1><p class="page-subtitle">A clear view of the space Flora uses on this browser.</p></div><button class="btn btn-secondary" data-view="settings">Manage limit ⚙</button></div>
+    $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">LOCAL STORAGE</div><h1 class="page-title">Flora Storage</h1><p class="page-subtitle">A clear view of the space Flora uses on this browser.</p></div><button class="btn btn-secondary" data-view="settings">Manage limit</button></div>
       <div class="storage-panel"><div class="storage-big"><span class="stat-label">Flora virtual storage</span><strong>${formatBytes(usage)}</strong><small>Estimated size of Flora profiles, settings and saved files.</small></div><div class="storage-big"><span class="stat-label">Your chosen limit</span><strong>${formatBytes(limit)}</strong><small>The limit you set inside Flora.</small></div></div>
-      <div class="panel" style="margin-top:15px"><h3>Storage breakdown</h3><p class="panel-subtitle">Local estimate; individual file sizes are approximate.</p><div class="progress-track" style="height:9px;margin:15px 0"><span style="width:${Math.min(100,usage/limit*100)}%"></span></div><div class="setting-row"><div class="setting-copy"><strong>Documents, sheets, slides and notes</strong><small>${formatBytes(files.reduce((sum,file)=>sum+new Blob([JSON.stringify(file)]).size,0))} across ${files.length} files</small></div><span class="tag">${files.length} files</span></div><div class="setting-row"><div class="setting-copy"><strong>Local profiles</strong><small>${profiles.length} profile${profiles.length===1?'':'s'} on this browser</small></div></div><div class="setting-row"><div class="setting-copy"><strong>Browser storage availability</strong><small id="browser-quota-label">Checking browser quota…</small></div><span class="tag">Browser managed</span></div><p class="small-print">Your chosen Flora limit is a logical cap for the app. The browser or operating system may impose a smaller quota, and may clear site data in some circumstances. Export important work regularly.</p></div>`;
+      <div class="panel" style="margin-top:15px"><h3>Storage breakdown</h3><p class="panel-subtitle">Local estimate; individual file sizes are approximate.</p><div class="progress-track storage-detail-track" style="height:10px;margin:15px 0"><span style="width:${Math.min(100,usage/limit*100)}%"></span></div><div class="setting-row"><div class="setting-copy"><strong>Documents, sheets, slides and notes</strong><small>${formatBytes(files.reduce((sum,file)=>sum+new Blob([JSON.stringify(file)]).size,0))} across ${files.length} files</small></div><span class="tag">${files.length} files</span></div><div class="setting-row"><div class="setting-copy"><strong>Local profiles</strong><small>${profiles.length} profile${profiles.length===1?'':'s'} on this browser</small></div></div><div class="setting-row"><div class="setting-copy"><strong>Browser storage availability</strong><small id="browser-quota-label">Checking browser quota…</small></div><span class="tag">Browser managed</span></div><p class="small-print">Your chosen Flora limit is a logical cap for the app. The browser or operating system may impose a smaller quota, and may clear site data in some circumstances. Export important work regularly.</p></div>`;
     estimatePromise.then(result=>{ const label=$('#browser-quota-label'); if(label) label.textContent=result.quota?`${formatBytes(result.usage)} used of approximately ${formatBytes(result.quota)} available to this site`:'The browser does not expose a storage estimate.'; });
   }
   function renderTasks() {
-    setBreadcrumb('More tools','Sage Tasks');
+    setBreadcrumb('Tools','Rowan Tasks');
     const tasks = window._floraTasks || [];
-    $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">GENTLE PLANNING</div><h1 class="page-title">Sage Tasks</h1><p class="page-subtitle">A simple local checklist for the things on your mind.</p></div></div><div class="panel" style="max-width:760px"><form id="task-form" class="task-input-row"><input id="task-input" class="text-input" placeholder="Add a task…" aria-label="New task" style="flex:1"><button class="btn btn-primary" type="submit">＋ Add task</button></form><div class="task-list">${tasks.length?tasks.map((task,i)=>`<label class="task-item ${task.done?'done':''}"><input type="checkbox" data-task-toggle="${i}" ${task.done?'checked':''}><span>${esc(task.text)}</span><button type="button" class="btn btn-ghost btn-small" data-task-delete="${i}" aria-label="Delete task">×</button></label>`).join(''):`<div class="empty-state"><div class="empty-flower">☑</div><h3>A fresh list</h3><p>Add one small next step. You can tick it off when it is done.</p></div>`}</div></div>`;
+    $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">GENTLE PLANNING</div><h1 class="page-title">Rowan Tasks</h1><p class="page-subtitle">A simple local checklist for the things on your mind.</p></div></div><div class="panel" style="max-width:760px"><form id="task-form" class="task-input-row"><input id="task-input" class="text-input" placeholder="Add a task…" aria-label="New task" style="flex:1"><button class="btn btn-primary" type="submit">Add task</button></form><div class="task-list">${tasks.length?tasks.map((task,i)=>`<label class="task-item ${task.done?'done':''}"><input type="checkbox" data-task-toggle="${i}" ${task.done?'checked':''}><span>${esc(task.text)}</span><button type="button" class="btn btn-ghost btn-small" data-task-delete="${i}" aria-label="Delete task">Remove</button></label>`).join(''):`<div class="empty-state"><h3>A fresh list</h3><p>Add one small next step. You can tick it off when it is done.</p></div>`}</div></div>`;
   }
   function renderFocus() {
-    setBreadcrumb('More tools','Lily Focus');
+    setBreadcrumb('Tools','Camellia Focus');
     const mins = Math.floor(focusSeconds/60).toString().padStart(2,'0');
     const secs = (focusSeconds%60).toString().padStart(2,'0');
-    $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">A MOMENT FOR YOURSELF</div><h1 class="page-title">Lily Focus</h1><p class="page-subtitle">A calm timer for a little focused work or a proper break.</p></div></div><div class="focus-card"><div class="focus-label">${focusMode==='focus'?'FOCUS SESSION':'REST BREAK'}</div><div class="focus-time" id="focus-time">${mins}:${secs}</div><p class="page-subtitle">${focusRunning?'One thing at a time. You have got this.':'Choose a session and begin when you are ready.'}</p><div class="focus-controls"><button class="btn btn-secondary" data-focus-mode="focus">25 min focus</button><button class="btn btn-secondary" data-focus-mode="break">5 min break</button></div><div class="focus-controls"><button class="btn btn-primary" data-focus-toggle>${focusRunning?'Pause':'Start'} session</button><button class="btn btn-ghost" data-focus-reset>Reset</button></div></div>`;
+    $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">A MOMENT FOR YOURSELF</div><h1 class="page-title">Camellia Focus</h1><p class="page-subtitle">A calm timer for a little focused work or a proper break.</p></div></div><div class="focus-card"><div class="focus-label">${focusMode==='focus'?'FOCUS SESSION':'REST BREAK'}</div><div class="focus-time" id="focus-time">${mins}:${secs}</div><p class="page-subtitle">${focusRunning?'One thing at a time. You have got this.':'Choose a session and begin when you are ready.'}</p><div class="focus-controls"><button class="btn btn-secondary" data-focus-mode="focus">25 min focus</button><button class="btn btn-secondary" data-focus-mode="break">5 min break</button></div><div class="focus-controls"><button class="btn btn-primary" data-focus-toggle>${focusRunning?'Pause':'Start'} session</button><button class="btn btn-ghost" data-focus-reset>Reset</button></div></div>`;
+  }
+
+  function renderTools() {
+    setBreadcrumb('Workspace','Tools');
+    $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">FLORA UTILITIES</div><h1 class="page-title">Tools</h1><p class="page-subtitle">Small utilities that make the creative work easier to manage.</p></div></div>
+      <div class="tool-grid">
+        ${toolCard('Amethyst','Send Flora files directly to another person on your local network.','PEER-TO-PEER TRANSFER','amethyst')}
+        ${toolCard('Rowan Tasks','Keep a lightweight checklist alongside your projects.','PLANNING','tasks')}
+        ${toolCard('Camellia Focus','Use a configurable focus and break timer.','FOCUS','focus')}
+        ${toolCard('Flora Storage','Review local usage and manage your storage cap.','STORAGE','storage')}
+      </div>
+      <div class="tool-note"><strong>Local-first by design</strong><p>Flora keeps files in this browser. Amethyst uses a direct browser-to-browser connection; it does not upload files to a cloud storage provider.</p></div>`;
+  }
+
+  function renderAmethyst() {
+    setBreadcrumb('Tools','Amethyst');
+    const choices = files.map(file => `<option value="${file.id}">${esc(file.name)} (${esc(fileInfo[file.type]?.short || 'File')})</option>`).join('');
+    $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">FLORA TOOL / PEER-TO-PEER</div><h1 class="page-title">Amethyst</h1><p class="page-subtitle">Send a Flora file directly to another person on your local network.</p></div><button class="btn btn-secondary" data-view="tools">Back to tools</button></div>
+      <div class="amethyst-status-row"><div><span class="amethyst-status-dot" id="amethyst-status-dot"></span><strong id="amethyst-status">Not connected</strong></div><small id="amethyst-status-detail">No file has been transferred.</small></div>
+      <div class="amethyst-grid">
+        <section class="amethyst-panel"><div class="panel-kicker">SENDER</div><h2>Send a file</h2><p>Choose something from My files and create a one-time connection offer.</p>
+          <label class="amethyst-label" for="amethyst-file-select">File to send</label><select class="select-control amethyst-select" id="amethyst-file-select" ${files.length?'':'disabled'}>${choices || '<option value="">No saved files yet</option>'}</select>
+          <button class="btn btn-primary" id="amethyst-create-offer" data-action="amethyst-create-offer" ${files.length?'':'disabled'}>Create connection offer</button>
+          <label class="amethyst-label" for="amethyst-offer-output">Offer code</label><textarea id="amethyst-offer-output" class="amethyst-code" rows="5" readonly placeholder="Your offer code will appear here."></textarea>
+          <button class="btn btn-secondary" data-action="amethyst-copy-offer">Copy offer code</button>
+          <div class="amethyst-divider"></div>
+          <label class="amethyst-label" for="amethyst-answer-input">Answer code from the receiver</label><textarea id="amethyst-answer-input" class="amethyst-code" rows="4" placeholder="Paste the receiver’s answer code here."></textarea>
+          <button class="btn btn-secondary" data-action="amethyst-apply-answer">Connect and send file</button>
+        </section>
+        <section class="amethyst-panel"><div class="panel-kicker">RECEIVER</div><h2>Receive a file</h2><p>Paste the sender’s offer code, then return the generated answer code to them.</p>
+          <label class="amethyst-label" for="amethyst-offer-input">Offer code from the sender</label><textarea id="amethyst-offer-input" class="amethyst-code" rows="5" placeholder="Paste the sender’s offer code here."></textarea>
+          <button class="btn btn-primary" data-action="amethyst-create-answer">Create answer code</button>
+          <label class="amethyst-label" for="amethyst-answer-output">Answer code</label><textarea id="amethyst-answer-output" class="amethyst-code" rows="5" readonly placeholder="Your answer code will appear here."></textarea>
+          <button class="btn btn-secondary" data-action="amethyst-copy-answer">Copy answer code</button>
+          <div class="amethyst-transfer" id="amethyst-transfer-state">Waiting for a connection. The received file will be saved to My files.</div>
+        </section>
+      </div>
+      <div class="tool-note amethyst-explainer"><strong>How it works</strong><p>Both people open the same Flora address over the same local network. The sender creates an offer code; the receiver creates an answer code and sends it back. Once connected, the file travels directly between browsers using WebRTC. No Flora cloud upload is involved.</p><p>Use a secure browser origin where required. Some browsers restrict peer connections on plain HTTP LAN addresses. This version uses local ICE candidates only, so it is designed for the same network and does not use an external relay or automatically discover nearby users.</p></div>
+      <div class="amethyst-footer"><button class="btn btn-ghost" data-action="amethyst-reset">Reset connection</button><span>Large transfers are sent in small chunks. Keep this page open until the transfer completes.</span></div>`;
+  }
+
+  function waitForIceGathering(peer) {
+    if (peer.iceGatheringState === 'complete') return Promise.resolve();
+    return new Promise(resolve => {
+      let finished = false;
+      const done = () => { if (finished) return; finished = true; peer.removeEventListener('icegatheringstatechange', check); resolve(); };
+      const check = () => { if (peer.iceGatheringState === 'complete') done(); };
+      peer.addEventListener('icegatheringstatechange', check);
+      setTimeout(done, 12000);
+    });
+  }
+  function setAmethystStatus(text, detail='') {
+    const label=$('#amethyst-status'),sub=$('#amethyst-status-detail');
+    if(label)label.textContent=text;
+    if(sub)sub.textContent=detail;
+    $('#amethyst-status-dot')?.classList.toggle('connected', /connected|complete/i.test(text));
+  }
+  function resetAmethyst() {
+    try { amethystChannel?.close(); } catch {}
+    try { amethystPeer?.close(); } catch {}
+    amethystChannel=null;amethystPeer=null;amethystSendingFile=null;amethystReceiveParts=[];amethystReceiveBytes=0;amethystExpectedBytes=0;amethystTransferStarted=false;
+  }
+  function attachAmethystSender(dataChannel, file) {
+    amethystChannel=dataChannel;
+    dataChannel.binaryType='arraybuffer';
+    dataChannel.onopen=async()=>{
+      setAmethystStatus('Connected','Sending '+file.name);
+      try {
+        const payload=new TextEncoder().encode(JSON.stringify({name:file.name,type:file.type,content:file.content}));
+        dataChannel.send(JSON.stringify({kind:'flora-file',name:file.name,type:file.type,totalBytes:payload.byteLength}));
+        const chunkSize=16*1024;
+        dataChannel.bufferedAmountLowThreshold=256*1024;
+        for(let offset=0;offset<payload.length;offset+=chunkSize){
+          if(dataChannel.readyState!=='open')throw new Error('Connection closed during transfer');
+          if(dataChannel.bufferedAmount>1024*1024)await new Promise(resolve=>dataChannel.addEventListener('bufferedamountlow',resolve,{once:true}));
+          dataChannel.send(payload.slice(offset,Math.min(offset+chunkSize,payload.length)));
+        }
+        setAmethystStatus('Transfer sent','Waiting for the receiver to confirm that the file was saved.');
+      } catch(error) { toast('Amethyst transfer failed: '+error.message,'error'); }
+    };
+    dataChannel.onmessage=event=>{
+      if(typeof event.data==='string'){
+        try{const msg=JSON.parse(event.data);if(msg.kind==='received'){setAmethystStatus('Transfer complete',`${msg.name || file.name} was saved by the receiver.`);toast('File received successfully by the other user.','success');}}
+        catch{}
+      }
+    };
+    dataChannel.onclose=()=>{if($('#amethyst-status'))setAmethystStatus('Connection closed');};
+    dataChannel.onerror=()=>toast('Amethyst connection encountered an error.','error');
+  }
+  function attachAmethystReceiver(dataChannel) {
+    amethystChannel=dataChannel;
+    dataChannel.binaryType='arraybuffer';
+    dataChannel.onopen=()=>{setAmethystStatus('Connected','Ready to receive a Flora file.');const state=$('#amethyst-transfer-state');if(state)state.textContent='Connected. Waiting for the sender to transfer a file.';};
+    dataChannel.onmessage=async event=>{
+      if(typeof event.data==='string'){
+        try{
+          const msg=JSON.parse(event.data);
+          if(msg.kind==='flora-file'){
+            amethystExpectedBytes=Number(msg.totalBytes)||0;amethystReceiveParts=[];amethystReceiveBytes=0;amethystTransferStarted=true;
+            const state=$('#amethyst-transfer-state');if(state)state.textContent=`Receiving ${msg.name || 'file'}…`;
+            setAmethystStatus('Receiving file',msg.name||'Incoming transfer');
+          }
+        }catch{}
+        return;
+      }
+      if(!amethystTransferStarted)return;
+      amethystReceiveParts.push(new Uint8Array(event.data));amethystReceiveBytes+=event.data.byteLength;
+      const state=$('#amethyst-transfer-state');if(state)state.textContent=`Receiving… ${Math.min(100,Math.round(amethystReceiveBytes/Math.max(1,amethystExpectedBytes)*100))}%`;
+      if(amethystReceiveBytes>=amethystExpectedBytes && amethystExpectedBytes>0){
+        try{
+          const combined=new Uint8Array(amethystExpectedBytes);let offset=0;
+          for(const part of amethystReceiveParts){combined.set(part.subarray(0,Math.min(part.length,combined.length-offset)),offset);offset+=part.length;if(offset>=combined.length)break;}
+          const incoming=JSON.parse(new TextDecoder().decode(combined));
+          if(!incoming || !appTypes.includes(incoming.type) || typeof incoming.name!=='string')throw new Error('The incoming file is not a supported Flora file.');
+          const received={...makeFile(incoming.type,incoming.name),content:incoming.content,folder:'Received'};
+          if(!(await canStore(received)))throw new Error('There is not enough Flora storage space for this file.');
+          files.push(received);await putRecord('files',received);updateNav();updateStorageUI();
+          amethystChannel?.send(JSON.stringify({kind:'received',name:received.name}));
+          if(state)state.textContent=`Received and saved “${received.name}” in My files.`;
+          setAmethystStatus('Transfer complete',`${formatBytes(amethystReceiveBytes)} received and saved locally.`);
+          toast('File received and saved to My files.','success');
+          amethystTransferStarted=false;amethystReceiveParts=[];
+        }catch(error){setAmethystStatus('Transfer failed',error.message);toast('Could not receive file: '+error.message,'error');}
+      }
+    };
+    dataChannel.onclose=()=>{if($('#amethyst-status'))setAmethystStatus('Connection closed');};
+    dataChannel.onerror=()=>toast('Amethyst connection encountered an error.','error');
+  }
+  async function amethystCreateOffer() {
+    const id=$('#amethyst-file-select')?.value;const file=files.find(item=>item.id===id);
+    if(!file){toast('Choose a file before creating an offer.','error');return;}
+    if(!('RTCPeerConnection' in window)){toast('This browser does not support direct peer-to-peer transfers.','error');return;}
+    resetAmethyst();amethystSendingFile=structuredCloneSafe(file);
+    amethystPeer=new RTCPeerConnection({iceServers:[]});
+    const dataChannel=amethystPeer.createDataChannel('flora-amethyst',{ordered:true});attachAmethystSender(dataChannel,amethystSendingFile);
+    const offer=await amethystPeer.createOffer();await amethystPeer.setLocalDescription(offer);await waitForIceGathering(amethystPeer);
+    const code=JSON.stringify({protocol:'flora-amethyst-v1',type:'offer',sdp:amethystPeer.localDescription.sdp});
+    $('#amethyst-offer-output').value=code;setAmethystStatus('Offer ready','Send the offer code to the receiver on your local network.');
+    toast('Connection offer created.','success');
+  }
+  async function amethystCreateAnswer() {
+    const raw=$('#amethyst-offer-input')?.value.trim();if(!raw){toast('Paste the sender offer code first.','error');return;}
+    const code=JSON.parse(raw);if(code.protocol!=='flora-amethyst-v1'||code.type!=='offer'||!code.sdp)throw new Error('That does not look like a Flora offer code.');
+    if(!('RTCPeerConnection' in window))throw new Error('This browser does not support direct peer-to-peer transfers.');
+    resetAmethyst();amethystPeer=new RTCPeerConnection({iceServers:[]});
+    amethystPeer.ondatachannel=event=>attachAmethystReceiver(event.channel);
+    await amethystPeer.setRemoteDescription({type:'offer',sdp:code.sdp});
+    const answer=await amethystPeer.createAnswer();await amethystPeer.setLocalDescription(answer);await waitForIceGathering(amethystPeer);
+    $('#amethyst-answer-output').value=JSON.stringify({protocol:'flora-amethyst-v1',type:'answer',sdp:amethystPeer.localDescription.sdp});
+    setAmethystStatus('Answer ready','Return the answer code to the sender.');toast('Answer code created.','success');
+  }
+  async function amethystApplyAnswer() {
+    if(!amethystPeer || !amethystSendingFile)throw new Error('Create a sender offer before applying an answer.');
+    const raw=$('#amethyst-answer-input')?.value.trim();if(!raw)throw new Error('Paste the receiver answer code first.');
+    const code=JSON.parse(raw);if(code.protocol!=='flora-amethyst-v1'||code.type!=='answer'||!code.sdp)throw new Error('That does not look like a Flora answer code.');
+    await amethystPeer.setRemoteDescription({type:'answer',sdp:code.sdp});
+    setAmethystStatus('Connecting','Waiting for the other browser to accept the connection.');
+  }
+  async function amethystCopy(id) {
+    const field=$('#'+id);if(!field?.value){toast('There is no connection code to copy yet.');return;}
+    try{await navigator.clipboard.writeText(field.value);toast('Connection code copied.','success');}
+    catch{field.focus();field.select();toast('Select and copy the connection code.');}
   }
 
   function renderSettings() {
     setBreadcrumb('Workspace','Settings');
-    const tabs = [ ['general','⚙','General'],['accessibility','◉','Accessibility'],['customization','✿','Customization'],['privacy','⌑','Privacy'] ];
-    const tabMarkup = tabs.map(([id,icon,label])=>`<button class="settings-tab ${settingsTab===id?'active':''}" data-settings-tab="${id}">${icon} &nbsp;${label}</button>`).join('');
+    const tabs = [ ['general','General'],['accessibility','Accessibility'],['customization','Customization'],['privacy','Privacy'] ];
+    const tabMarkup = tabs.map(([id,label])=>`<button class="settings-tab ${settingsTab===id?'active':''}" data-settings-tab="${id}">${label}</button>`).join('');
     let content = '';
     if (settingsTab === 'general') content = `
       <h2>General</h2><p>Set how Flora behaves and how much space it can use.</p>
-      ${settingToggle('autosave','Automatic saving','Save your work as you type. You can also use Ctrl / ⌘ + S.',settings.autosave)}
+      ${settingToggle('autosave','Automatic saving','Save your work as you type. You can also use Ctrl + S (Command + S on Mac).',settings.autosave)}
       ${settingToggle('confirmDelete','Confirm before deleting','Ask before removing a file from this device.',settings.confirmDelete)}
+      ${settingToggle('compactMode','Compact sidebar','Use a narrower navigation rail to give editors more room.',settings.compactMode)}
       <div class="setting-row"><div class="setting-copy"><strong>Virtual storage limit</strong><small>Choose a cap for Flora’s local files. Options are constrained by the browser quota estimate.</small></div><div style="display:flex;gap:7px;align-items:center"><select class="select-control" id="storage-unit"><option value="KB" ${settings.storageUnit==='KB'?'selected':''}>KB</option><option value="MB" ${settings.storageUnit==='MB'?'selected':''}>MB</option><option value="GB" ${settings.storageUnit==='GB'?'selected':''}>GB</option></select><select class="select-control" id="storage-amount" aria-label="Storage amount"></select></div></div>
-      <div class="setting-row"><div class="setting-copy"><strong>Keyboard shortcuts</strong><small><span class="kbd">Ctrl</span> + <span class="kbd">S</span> Save · <span class="kbd">Ctrl</span> + <span class="kbd">N</span> New document · <span class="kbd">Esc</span> Close dialog</small></div></div>`;
+      <div class="setting-row"><div class="setting-copy"><strong>Keyboard shortcuts</strong><small><span class="kbd">Ctrl</span> + <span class="kbd">S</span> Save · <span class="kbd">Ctrl</span> + <span class="kbd">N</span> Create document · <span class="kbd">Esc</span> Close dialog</small></div></div>`;
     if (settingsTab === 'accessibility') content = `
       <h2>Accessibility</h2><p>Adjust Flora to make your workspace more comfortable.</p>
       ${settingToggle('largeText','Larger text','Increase the overall interface text size.',settings.largeText)}
@@ -350,13 +557,14 @@
     if (settingsTab === 'customization') content = `
       <h2>Customization</h2><p>Give your Flora workspace a colour that feels like yours.</p>
       <div class="setting-row"><div class="setting-copy"><strong>Accent colour</strong><small>Used for buttons, focus states and small highlights.</small></div><div class="swatches">${['#e9c96b','#c8a1a0','#9eafa0','#9aa9bd','#b3a0c2','#d69c6c','#8f9b6a'].map(color=>`<button class="swatch ${settings.accent===color?'active':''}" style="background:${color}" data-accent="${color}" aria-label="Set accent ${color}"></button>`).join('')}</div></div>
+      <div class="setting-row"><div class="setting-copy"><strong>Profile details</strong><small>Names, pronouns, bios and cursor colours are managed separately in your profile settings.</small></div><button class="btn btn-secondary btn-small" data-action="edit-profile">Open profile settings</button></div>
       <div class="setting-row"><div class="setting-copy"><strong>Default typeface</strong><small>Newsreader is used when available, with a Georgia fallback. The app does not download fonts, so the workspace remains offline-first.</small></div><span class="tag">Newsreader</span></div>
       <div class="setting-row"><div class="setting-copy"><strong>Workspace appearance</strong><small>Flora uses a warm, light pastel palette designed for long sessions.</small></div><span class="tag">Warm light</span></div>`;
     if (settingsTab === 'privacy') content = `
       <h2>Privacy</h2><p>Your workspace is designed to stay on this device.</p>
       <div class="setting-row"><div class="setting-copy"><strong>Local-first storage</strong><small>Profiles, settings and work files are saved in this browser’s IndexedDB. No Flora account or analytics service is used.</small></div><span class="tag">On device</span></div>
       <div class="setting-row"><div class="setting-copy"><strong>Collaboration scope</strong><small>Live sync uses BroadcastChannel between tabs/windows on the same browser origin. It does not send your files to a server.</small></div><span class="tag">Local only</span></div>
-      <div class="setting-row"><div class="setting-copy"><strong>Export your work</strong><small>You can export files at any time from Fern Files or an editor.</small></div><button class="btn btn-secondary btn-small" data-view="files">Open files</button></div>
+      <div class="setting-row"><div class="setting-copy"><strong>Export your work</strong><small>You can export files at any time from My files or an editor.</small></div><button class="btn btn-secondary btn-small" data-view="files">Open files</button></div>
       <div class="setting-row"><div class="setting-copy"><strong>Clear Flora data</strong><small>Remove every local profile, file, task and preference from this browser. This cannot be undone.</small></div><button class="btn btn-danger btn-small" data-action="clear-data">Clear all data</button></div>`;
     $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">MAKE FLORA YOURS</div><h1 class="page-title">Settings</h1><p class="page-subtitle">A few thoughtful controls for your workspace.</p></div></div><div class="settings-layout"><div class="settings-tabs">${tabMarkup}</div><section class="settings-content">${content}</section></div>`;
     if (settingsTab === 'general') populateStorageAmount();
@@ -420,12 +628,14 @@
     const file=activeFile, info=fileInfo[file.type];
     setBreadcrumb(info.label,file.name);
     const root=$('#view-root');
-    root.innerHTML = `<div class="welcome-row" style="margin-bottom:17px"><div><div class="page-kicker">${info.label.toUpperCase()}</div><h1 class="page-title" style="font-size:29px">${esc(file.name)}</h1><p class="page-subtitle">Saved locally · Last edited ${prettyDate(file.updatedAt)}</p></div><div class="welcome-actions"><button class="btn btn-secondary" data-action="collaborate">⌁ Collaborate</button><button class="btn btn-secondary" data-action="export-active">Export ↓</button><button class="btn btn-primary" data-action="back-files">Done</button></div></div>
-      <section class="app-workspace"><div class="editor-topline"><input class="editor-title-input" id="editor-title" value="${esc(file.name)}" aria-label="File name"><div class="editor-actions"><span class="save-indicator" id="save-indicator">✓ Saved on this device</span><button class="btn btn-ghost btn-small" data-action="rename-active">Rename</button><button class="btn btn-ghost btn-small" data-action="export-active">Export</button></div></div><div class="collab-bar"><span class="collab-label">IN THIS FILE</span><div class="collab-users" id="collab-users"><span class="collab-user"><i class="collab-caret" style="--user-color:${esc(profile.color)}"></i>${esc(profile.name.split(' ')[0])} <span class="collab-action">⌖</span></span></div><span class="collab-self">Local collaboration</span></div>${renderEditorBody(file)}</section>`;
+    root.innerHTML = `<section class="editor-screen">
+      <header class="editor-document-header"><div class="editor-document-heading"><button class="editor-back" data-action="back-files">My files</button><span class="editor-header-separator">/</span><input class="editor-title-input" id="editor-title" value="${esc(file.name)}" aria-label="File name"></div><div class="editor-actions"><span class="save-indicator" id="save-indicator">Saved on this device</span><button class="btn btn-secondary btn-small" data-action="collaborate">Collaborate</button><button class="btn btn-secondary btn-small" data-action="export-active">Export</button><button class="btn btn-primary btn-small" data-action="rename-active">Save name</button></div></header>
+      <div class="editor-file-meta"><span>${info.label}</span><span>Last edited ${prettyDate(file.updatedAt)}</span><span>Local file</span></div>
+      <section class="app-workspace">${renderEditorBody(file)}</section>
+      <div class="collab-dock"><div class="collab-dock-heading"><strong>Collaborators</strong><span>Live presence in this file</span></div><div class="collab-users" id="collab-users"><span class="collab-user"><i class="collab-caret" style="--user-color:${esc(profile.color)}"></i><strong>${esc(profile.name.split(' ')[0])}</strong><span class="collab-action">You</span></span></div></div>
+      </section>`;
     if (file.type==='doc') {
-      const editor=$('#document-editor');
-      editor.innerHTML=sanitizeHTML(file.content);
-      editor.spellcheck=!!settings.spellcheck;
+      const editor=$('#document-editor');editor.innerHTML=sanitizeHTML(file.content);editor.spellcheck=!!settings.spellcheck;
     }
     if (file.type==='note') { const editor=$('#note-editor'); editor.value=String(file.content||''); editor.spellcheck=!!settings.spellcheck; }
     if (file.type==='sheet') renderSheetGrid();
@@ -434,11 +644,24 @@
     updateCollabBar();
   }
   function renderEditorBody(file) {
-    if (file.type==='doc') return `<div class="editor-toolbar"><button class="tool-button" data-format="bold" title="Bold"><b>B</b></button><button class="tool-button" data-format="italic" title="Italic"><i>I</i></button><button class="tool-button" data-format="underline" title="Underline"><u>U</u></button><span style="width:1px;height:18px;background:#e8e0d0;margin:0 4px"></span><select class="editor-select" id="block-format" aria-label="Text style"><option value="p">Paragraph</option><option value="h1">Heading 1</option><option value="h2">Heading 2</option><option value="h3">Heading 3</option><option value="blockquote">Quote</option></select><button class="tool-button" data-format="insertUnorderedList" title="Bulleted list">☷</button><button class="tool-button" data-format="insertOrderedList" title="Numbered list">1.</button><button class="tool-button" data-format="justifyLeft" title="Align left">⇤</button><button class="tool-button" data-format="justifyCenter" title="Align centre">↔</button><button class="tool-button" data-format="removeFormat" title="Clear formatting">Tx</button><span style="flex:1"></span><span class="small-print">Rich text · autosaves locally</span></div><div id="document-editor" class="document-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Document editor"></div>`;
-    if (file.type==='note') return `<div class="editor-toolbar"><span class="small-print">Plain text note · simple and quick</span><span style="flex:1"></span><span class="small-print">${esc((file.content||'').length)} characters</span></div><textarea class="notes-editor" id="note-editor" placeholder="Write a quick thought…" aria-label="Note editor"></textarea>`;
-    if (file.type==='sheet') return `<div class="editor-toolbar"><span class="small-print">Poppy Sheets · click a cell to edit</span><button class="btn btn-secondary btn-small" data-action="add-row">＋ Add row</button><button class="btn btn-secondary btn-small" data-action="add-column">＋ Add column</button><span style="flex:1"></span><button class="btn btn-secondary btn-small" data-action="export-csv">Export CSV</button></div><div class="sheet-wrap"><div class="sheet-formula"><span class="cell-ref" id="cell-ref">A1</span><span class="small-print">fx</span><input class="text-input" id="formula-input" placeholder="Enter a value or formula, e.g. =SUM(A1:A5)" aria-label="Cell value or formula"></div><div id="sheet-grid"></div><p class="small-print" style="margin:12px 0 0">Supported formulas: +, −, ×, ÷, cell references and SUM(range). Formula results recalculate on edit.</p></div>`;
-    if (file.type==='slides') return `<div class="editor-toolbar"><button class="btn btn-secondary btn-small" data-action="slide-add">＋ Add slide</button><button class="btn btn-secondary btn-small" data-action="slide-up">↑ Move</button><button class="btn btn-secondary btn-small" data-action="slide-down">↓ Move</button><button class="btn btn-secondary btn-small" data-action="slide-delete">Delete slide</button><span style="flex:1"></span><span class="small-print">Iris Slides · simple offline presentation editor</span></div><div class="slide-stage"><div class="slide-card" id="slide-card"></div></div><div class="slide-controls"><div class="slide-thumbnails" id="slide-thumbnails"></div></div><div class="panel" style="margin:0 18px 18px"><div class="form-grid"><div class="form-field"><label for="slide-title-input">Slide title</label><input id="slide-title-input" class="text-input"></div><div class="form-field"><label for="slide-body-input">Slide text</label><textarea id="slide-body-input" class="text-area" rows="2"></textarea></div></div></div>`;
-    if (file.type==='board') return `<div class="editor-toolbar"><button class="btn btn-secondary btn-small" data-action="board-add">＋ Add sticky note</button><span style="flex:1"></span><span class="small-print">Aster Board · your lightweight idea wall</span></div><div class="board-area" id="board-area"></div>`;
+    if (file.type==='doc') return `<div class="docs-editor-shell">
+      <div class="docs-menu-row"><span class="docs-menu-label">File</span><span class="docs-menu-label">Edit</span><span class="docs-menu-label">View</span><span class="docs-menu-label">Insert</span><span class="docs-menu-label">Format</span><span class="docs-menu-label">Tools</span></div>
+      <div class="editor-toolbar docs-toolbar">
+        <button class="tool-button" data-format="undo" title="Undo">Undo</button><button class="tool-button" data-format="redo" title="Redo">Redo</button><span class="toolbar-divider"></span>
+        <select class="editor-select" id="block-format" aria-label="Text style"><option value="p">Normal text</option><option value="h1">Title</option><option value="h2">Heading 1</option><option value="h3">Heading 2</option><option value="blockquote">Quote</option></select>
+        <select class="editor-select" id="font-face" aria-label="Font family"><option value="Newsreader">Newsreader</option><option value="Georgia">Georgia</option><option value="Arial">Arial</option><option value="Verdana">Verdana</option><option value="Times New Roman">Times New Roman</option></select>
+        <select class="editor-select" id="font-size" aria-label="Font size"><option value="3">11</option><option value="4" selected>12</option><option value="5">14</option><option value="6">18</option><option value="7">24</option></select>
+        <span class="toolbar-divider"></span><button class="tool-button text-format" data-format="bold">B</button><button class="tool-button text-format italic" data-format="italic">I</button><button class="tool-button text-format underline" data-format="underline">U</button>
+        <label class="toolbar-color" title="Text colour">Text <input type="color" id="font-color" value="#38362f" aria-label="Text colour"></label><label class="toolbar-color" title="Highlight colour">Highlight <input type="color" id="highlight-color" value="#fff0b8" aria-label="Highlight colour"></label>
+        <span class="toolbar-divider"></span><button class="tool-button" data-format="insertUnorderedList">Bullets</button><button class="tool-button" data-format="insertOrderedList">Numbering</button><button class="tool-button" data-format="justifyLeft">Left</button><button class="tool-button" data-format="justifyCenter">Centre</button><button class="tool-button" data-format="justifyRight">Right</button><button class="tool-button" data-format="indent">Indent</button><button class="tool-button" data-format="outdent">Outdent</button><button class="tool-button" data-format="removeFormat">Clear</button>
+        <span class="docs-toolbar-spacer"></span><span class="docs-autosave-note">Changes save automatically</span>
+      </div>
+      <div class="docs-page-stage"><div class="document-page"><div id="document-editor" class="document-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Document editor"></div><div class="remote-cursors-layer" id="remote-cursors-layer" aria-hidden="true"></div></div></div>
+    </div>`;
+    if (file.type==='note') return `<div class="editor-toolbar"><span class="editor-toolbar-title">Anemone Notes</span><span class="toolbar-divider"></span><span class="small-print">A distraction-free space for plain text.</span></div><textarea class="notes-editor" id="note-editor" placeholder="Start writing…" aria-label="Note editor"></textarea>`;
+    if (file.type==='sheet') return `<div class="editor-toolbar"><span class="editor-toolbar-title">Amaryllis Sheets</span><button class="btn btn-secondary btn-small" data-action="add-row">Add row</button><button class="btn btn-secondary btn-small" data-action="add-column">Add column</button><span style="flex:1"></span><button class="btn btn-secondary btn-small" data-action="export-csv">Export CSV</button></div><div class="sheet-wrap"><div class="sheet-formula"><span class="cell-ref" id="cell-ref">A1</span><span class="small-print">Formula</span><input class="text-input" id="formula-input" placeholder="Enter a value or formula, e.g. =SUM(A1:A5)" aria-label="Cell value or formula"></div><div id="sheet-grid"></div><p class="small-print" style="margin:12px 0 0">Supported formulas include addition, subtraction, multiplication, division, cell references and SUM(range). Results recalculate on edit. Use plus, minus, times and divided-by operations.</p></div>`;
+    if (file.type==='slides') return `<div class="editor-toolbar"><span class="editor-toolbar-title">Iris Presentations</span><button class="btn btn-secondary btn-small" data-action="slide-add">Add slide</button><button class="btn btn-secondary btn-small" data-action="slide-up">Move up</button><button class="btn btn-secondary btn-small" data-action="slide-down">Move down</button><button class="btn btn-secondary btn-small" data-action="slide-delete">Delete slide</button><span style="flex:1"></span><span class="small-print">Offline presentation editor</span></div><div class="slide-stage"><div class="slide-card" id="slide-card"></div></div><div class="slide-controls"><div class="slide-thumbnails" id="slide-thumbnails"></div></div><div class="panel" style="margin:0 18px 18px"><div class="form-grid"><div class="form-field"><label for="slide-title-input">Slide title</label><input id="slide-title-input" class="text-input"></div><div class="form-field"><label for="slide-body-input">Slide text</label><textarea id="slide-body-input" class="text-area" rows="2"></textarea></div></div></div>`;
+    if (file.type==='board') return `<div class="editor-toolbar"><span class="editor-toolbar-title">Dahlia Boards</span><button class="btn btn-secondary btn-small" data-action="board-add">Add sticky note</button><span style="flex:1"></span><span class="small-print">A freeform space for ideas.</span></div><div class="board-area" id="board-area"></div>`;
     return '';
   }
   function saveStatus(text) { const el=$('#save-indicator'); if(el) el.textContent=text; }
@@ -449,7 +672,7 @@
     if (activeFile.type==='sheet') { await updateFile({content:activeFile.content}); }
     if (activeFile.type==='slides') { await updateFile({content:activeFile.content}); }
     if (activeFile.type==='board') { await updateFile({content:activeFile.content}); }
-    saveStatus('✓ Saved on this device');
+    saveStatus('Saved on this device');
     broadcastPresence(action);
   }
   function scheduleSave(action='typing') {
@@ -519,11 +742,15 @@
   }
   function renderBoard() {
     const area=$('#board-area');if(!area||!activeFile)return;
-    area.innerHTML=(activeFile.content||[]).map((note,index)=>`<div class="board-note" data-board-note="${note.id}" style="background:${note.color==='green'?'#e8eedf':note.color==='pink'?'#f4e3df':'#f8edc6'}"><textarea data-board-text="${note.id}" aria-label="Sticky note ${index+1}">${esc(note.text)}</textarea><button class="btn btn-ghost btn-small" data-board-delete="${note.id}">Remove ×</button></div>`).join('');
+    area.innerHTML=(activeFile.content||[]).map((note,index)=>`<div class="board-note" data-board-note="${note.id}" style="background:${note.color==='green'?'#e8eedf':note.color==='pink'?'#f4e3df':'#f8edc6'}"><textarea data-board-text="${note.id}" aria-label="Sticky note ${index+1}">${esc(note.text)}</textarea><button class="btn btn-ghost btn-small" data-board-delete="${note.id}">Remove</button></div>`).join('');
   }
 
   // Local tab collaboration. A separate server would be required for remote devices.
   function setupChannel() {
+    if (presenceTimer) { clearInterval(presenceTimer); presenceTimer=null; }
+    try { channel?.close(); } catch {}
+    channel=null;
+    peers.clear();
     if (!('BroadcastChannel' in window)) return;
     try { channel=new BroadcastChannel('flora-local-collaboration-v1'); }
     catch { channel=null; }
@@ -563,17 +790,33 @@
       }
       if(msg.type==='profile-ping' && activeFileId && msg.fileId===activeFileId){broadcastPresence('viewing');}
     };
-    setInterval(()=>{
+    presenceTimer=setInterval(()=>{
       const cutoff=Date.now()-15000;
       for(const [id,peer] of peers.entries())if(peer.seen<cutoff)peers.delete(id);
       updateCollabBar();
       if(activeFileId)broadcastPresence('viewing');
     },5000);
   }
+  function getLocalCursor() {
+    const editor=$('#document-editor');
+    if(editor){
+      const selection=window.getSelection();
+      if(selection?.rangeCount && editor.contains(selection.anchorNode)){
+        const toOffset=(node,offset)=>{try{const range=document.createRange();range.selectNodeContents(editor);range.setEnd(node,offset);return range.toString().length;}catch{return 0;}};
+        return {start:toOffset(selection.anchorNode,selection.anchorOffset),end:toOffset(selection.focusNode,selection.focusOffset)};
+      }
+    }
+    const cell=document.activeElement?.closest?.('[data-cell]');
+    if(cell)return {cell:cell.dataset.cell};
+    return null;
+  }
   function broadcastPresence(action='viewing') {
-    if(!channel||!profile)return;
-    if(!activeFileId)return;
-    channel.postMessage({type:'presence',profileId:profile.id,profileName:profile.name,firstName:profile.name.trim().split(/\s+/)[0],color:profile.color,fileId:activeFileId,action,seen:Date.now()});
+    if(!channel||!profile||!activeFileId)return;
+    const stamp=Date.now();
+    if(action!=='viewing'){lastPresenceAction=action;lastPresenceActivityAt=stamp;}
+    else if(stamp-lastPresenceActivityAt<3500)action=lastPresenceAction;
+    else lastPresenceAction='viewing';
+    channel.postMessage({type:'presence',profileId:profile.id,profileName:profile.name,firstName:profile.name.trim().split(/\s+/)[0],color:profile.color,fileId:activeFileId,action,cursor:getLocalCursor(),seen:stamp});
   }
   function sendFileUpdate(file) {
     if(!channel||!profile)return;
@@ -581,9 +824,33 @@
   }
   function updateCollabBar() {
     const target=$('#collab-users');if(!target||!profile)return;
-    const list=[{profileId:profile.id,firstName:profile.name.trim().split(/\s+/)[0],color:profile.color,action:'viewing'},...([...peers.values()])];
-    const actionIcon={typing:'✎',deleting:'⌫',selecting:'↖',viewing:'⌖',editing:'✎',adding:'＋'};
-    target.innerHTML=list.map(user=>`<span class="collab-user"><i class="collab-caret" style="--user-color:${esc(user.color||'#c7a653')}"></i><strong>${esc(user.firstName||user.profileName||'Guest')}</strong><span class="collab-action">${actionIcon[user.action]||'⌖'}</span></span>`).join('');
+    const list=[{profileId:profile.id,firstName:profile.name.trim().split(/\s+/)[0],color:profile.color,action:'viewing',self:true},...([...peers.values()])];
+    const actionLabel={typing:'Typing',deleting:'Deleting',selecting:'Selecting',viewing:'Viewing',editing:'Editing',adding:'Adding'};
+    target.innerHTML=list.map(user=>`<span class="collab-user ${user.self?'is-self':''}"><i class="collab-caret" style="--user-color:${esc(user.color||'#c7a653')}"></i><strong>${esc(user.firstName||user.profileName||'Guest')}</strong><span class="collab-action">${user.self?'You':(actionLabel[user.action]||'Viewing')}</span></span>`).join('');
+    renderCollaboratorCursors();
+  }
+  function textRangeAtOffset(root, offset) {
+    const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let node,remaining=Math.max(0,offset);
+    while((node=walker.nextNode())){const length=node.nodeValue.length;if(remaining<=length){const range=document.createRange();range.setStart(node,remaining);range.collapse(true);return range;}remaining-=length;}
+    const range=document.createRange();range.selectNodeContents(root);range.collapse(false);return range;
+  }
+  function renderCollaboratorCursors() {
+    const layer=$('#remote-cursors-layer');const editor=$('#document-editor');
+    if(layer){layer.innerHTML='';const page=layer.parentElement;const pageRect=page.getBoundingClientRect();
+      for(const peer of peers.values()){
+        const cursor=peer.cursor;if(!cursor||!Number.isFinite(cursor.start))continue;
+        try{const range=textRangeAtOffset(editor,cursor.start);const rect=range.getBoundingClientRect();
+          const marker=document.createElement('div');marker.className='remote-cursor-marker';marker.style.left=`${Math.max(0,rect.left-pageRect.left)}px`;marker.style.top=`${Math.max(0,rect.top-pageRect.top)}px`;marker.style.setProperty('--user-color',peer.color||'#7397cf');
+          const caret=document.createElement('span');caret.className='remote-cursor-caret';marker.append(caret);
+          const label=document.createElement('span');label.className='remote-cursor-name';const actionLabel={typing:'Typing',deleting:'Deleting',selecting:'Selecting',viewing:'Viewing',editing:'Editing',adding:'Adding'};label.textContent=`${peer.firstName||peer.profileName||'Guest'} · ${actionLabel[peer.action]||'Viewing'}`;marker.append(label);layer.append(marker);
+          if(Number.isFinite(cursor.end)&&cursor.end!==cursor.start){const endRange=textRangeAtOffset(editor,cursor.end);const endRect=endRange.getBoundingClientRect();const highlight=document.createElement('div');highlight.className='remote-selection-marker';highlight.style.left=`${Math.min(rect.left,endRect.left)-pageRect.left}px`;highlight.style.top=`${Math.min(rect.top,endRect.top)-pageRect.top}px`;highlight.style.width=`${Math.max(3,Math.abs(endRect.left-rect.left))}px`;highlight.style.height=`${Math.max(rect.height,endRect.height)}px`;highlight.style.setProperty('--user-color',peer.color||'#7397cf');layer.append(highlight);}
+        }catch{}
+      }
+    }
+    if(activeFile?.type==='sheet'){
+      $$('[data-cell]').forEach(cell=>{cell.classList.remove('collab-cell');cell.style.removeProperty('--collab-cell-color');cell.removeAttribute('data-collaborator');});
+      for(const peer of peers.values())if(peer.cursor?.cell){const cell=$(`[data-cell="${peer.cursor.cell}"]`);if(cell){cell.classList.add('collab-cell');cell.style.setProperty('--collab-cell-color',peer.color||'#7397cf');cell.setAttribute('data-collaborator',peer.firstName||'Collaborator');}}
+    }
   }
   function broadcastActionFromInput(event) {
     const action=event.inputType?.includes('delete')?'deleting':'typing';
@@ -652,13 +919,13 @@
   }
   function showExportModal(file) {
     const types=fileInfo[file.type].extensions;
-    showModal(`<div class="modal-flower">↓</div><h2>Export ${esc(file.name)}</h2><p>Choose a format. Flora creates the file directly in your browser.</p><div class="choice-row">${types.map((ext,i)=>`<button class="choice-chip ${i===0?'active':''}" data-export-format="${ext}">.${ext.toUpperCase()}</button>`).join('')}</div><p class="small-print" style="margin-top:14px">Office files are generated locally as basic Open XML packages. Documents keep headings and inline emphasis; spreadsheets keep cell values and basic formulas; presentations export title-and-body slides.</p><div class="form-foot"><button class="btn btn-ghost" data-modal-close>Cancel</button><button class="btn btn-primary" id="confirm-export">Export file</button></div>`, 'Export file');
+    showModal(`<h2>Export ${esc(file.name)}</h2><p>Choose a format. Flora creates the file directly in your browser.</p><div class="choice-row">${types.map((ext,i)=>`<button class="choice-chip ${i===0?'active':''}" data-export-format="${ext}">.${ext.toUpperCase()}</button>`).join('')}</div><p class="small-print" style="margin-top:14px">Office files are generated locally as basic Open XML packages. Documents keep headings and inline emphasis; spreadsheets keep cell values and basic formulas; presentations export title-and-body slides.</p><div class="form-foot"><button class="btn btn-ghost" data-modal-close>Cancel</button><button class="btn btn-primary" id="confirm-export">Export file</button></div>`, 'Export file');
     let selected=types[0];
     $$('[data-export-format]').forEach(button=>button.addEventListener('click',()=>{$$('[data-export-format]').forEach(b=>b.classList.remove('active'));button.classList.add('active');selected=button.dataset.exportFormat;}));
     $('#confirm-export').addEventListener('click',()=>{exportFile(file,selected);closeModal();});
   }
   function showImportModal() {
-    showModal(`<div class="modal-flower">＋</div><h2>Bring a file into Flora</h2><p>Import a text, HTML, CSV or JSON file. The imported copy is stored locally in your Flora library.</p><div class="import-drop"><strong>Choose a file from your device</strong><br><input type="file" id="import-file" accept=".txt,.md,.html,.htm,.csv,.json,text/plain,text/html,text/csv,application/json"></div><div class="form-foot"><span class="form-hint">The original file is not changed.</span><button class="btn btn-ghost" data-modal-close>Close</button></div>`, 'Import file');
+    showModal(`<h2>Bring a file into Flora</h2><p>Import a text, HTML, CSV or JSON file. The imported copy is stored locally in your Flora library.</p><div class="import-drop"><strong>Choose a file from your device</strong><br><input type="file" id="import-file" accept=".txt,.md,.html,.htm,.csv,.json,text/plain,text/html,text/csv,application/json"></div><div class="form-foot"><span class="form-hint">The original file is not changed.</span><button class="btn btn-ghost" data-modal-close>Close</button></div>`, 'Import file');
     $('#import-file').addEventListener('change',async event=>{
       const file=event.target.files?.[0];if(!file)return;
       const extension=file.name.split('.').pop().toLowerCase();
@@ -703,31 +970,46 @@
     return options.map(value=>`<option value="${value}">${value} ${unit}</option>`).join('');
   }
   function showSetupModal(isNewProfile=false) {
-    const selectedColor='#b89a50';
-    showModal(`<div class="modal-flower">✿</div><div class="page-kicker">${isNewProfile?'ANOTHER LITTLE CORNER':'WELCOME TO FLORA'}</div><h2>${isNewProfile?'Create a local profile':'Let’s set up your workspace.'}</h2><p>${isNewProfile?'Make a separate profile on this browser. Profiles stay on this device.':'A few details will make Flora feel more like yours. You can change them later in settings.'}</p>
-      <form id="setup-form"><div class="form-grid"><div class="form-field full"><label for="setup-name">Your name *</label><input id="setup-name" name="name" required maxlength="60" placeholder="e.g. Alex Morgan" autocomplete="name"></div><div class="form-field"><label for="setup-pronouns">Pronouns (optional)</label><input id="setup-pronouns" name="pronouns" maxlength="30" placeholder="e.g. she / her"></div><div class="form-field"><label for="setup-color">Favourite colour</label><input id="setup-color" name="color" type="color" value="${selectedColor}" style="height:39px;padding:4px"></div><div class="form-field full"><label for="setup-bio">A little bio (optional)</label><textarea id="setup-bio" name="bio" maxlength="240" placeholder="A line about you, your projects or what you love…"></textarea></div>${!isNewProfile?`<div class="form-field"><label for="setup-unit">Storage unit</label><select id="setup-unit"><option>KB</option><option selected>MB</option><option>GB</option></select></div><div class="form-field"><label for="setup-amount">Storage limit</label><select id="setup-amount">${storageSetupOptions('MB')}</select></div>`:''}</div><div class="form-foot"><span class="form-hint">Your profile and files are stored in this browser.</span><button class="btn btn-primary" type="submit">${isNewProfile?'Create profile':'Enter Flora'} →</button></div></form>`, 'Flora setup');
-    const refreshSetupAmounts=async unit=>{
-      const multiplier=unit==='GB'?1024**3:unit==='MB'?1024**2:1024;
-      const maxBytes=await storageQuotaBytes();const maxAmount=Math.floor(maxBytes/multiplier);
-      const choices=[];for(let amount=16;amount<=maxAmount&&choices.length<64;amount*=2)choices.push(amount);
-      $('#setup-amount').innerHTML=choices.length?choices.map(amount=>`<option value="${amount}">${amount} ${unit}</option>`).join(''):`<option value="">Unavailable — browser quota below 16 ${unit}</option>`;
-      $('#setup-amount').disabled=!choices.length;
-      if(!choices.length && unit==='GB') { $('#setup-unit').value='MB'; await refreshSetupAmounts('MB'); }
+    const state={name:'',bio:'',color:'#b89a50',accent:settings.accent||'#e9c96b',compact:!!settings.compactMode,reduceMotion:!!settings.reduceMotion,unit:settings.storageUnit||'MB',amount:settings.storageAmount||64};
+    let step=1;
+    const total=isNewProfile?2:4;
+    const bytesFor=(unit,amount)=>amount*(unit==='GB'?1024**3:unit==='MB'?1024**2:1024);
+    const render=async()=>{
+      let body='';
+      if(step===1)body=`<div class="setup-step-copy"><div class="page-kicker">STEP 1 OF ${total}</div><h2>${isNewProfile?'Create a profile':'Start with your profile'}</h2><p>This name and colour identify you in your local Flora workspace and in collaborator presence.</p></div><div class="form-grid"><div class="form-field full"><label for="setup-name">Display name</label><input id="setup-name" required maxlength="60" placeholder="e.g. Alex Morgan" value="${esc(state.name)}" autocomplete="name"></div><div class="form-field"><label for="setup-color">Cursor colour</label><input id="setup-color" type="color" value="${state.color}" style="height:44px;padding:4px"></div><div class="form-field"><label for="setup-bio">Bio (optional)</label><input id="setup-bio" maxlength="240" placeholder="A little about you" value="${esc(state.bio)}"></div></div>`;
+      if(step===2&&isNewProfile)body=`<div class="setup-step-copy"><div class="page-kicker">STEP 2 OF 2</div><h2>Profile ready</h2><p>Your new profile is separate from the others on this browser. You can update your profile details at any time.</p></div><div class="setup-review"><span class="setup-review-label">NEW PROFILE</span><strong>${esc(state.name||'Your profile')}</strong><small>Cursor colour and bio are saved locally.</small></div>`;
+      if(step===2&&!isNewProfile)body=`<div class="setup-step-copy"><div class="page-kicker">STEP 2 OF ${total}</div><h2>Set up your workspace</h2><p>Choose a subtle accent and the navigation density you prefer. These choices can be changed at any time.</p></div><div class="setting-row setup-setting"><div class="setting-copy"><strong>Workspace accent</strong><small>Used for selection states, controls and highlights.</small></div><div class="swatches">${['#e9c96b','#c8a1a0','#9eafa0','#9aa9bd','#b3a0c2','#d69c6c','#8f9b6a'].map(color=>`<button type="button" class="swatch ${state.accent===color?'active':''}" style="background:${color}" data-setup-accent="${color}" aria-label="Select accent colour ${color}"></button>`).join('')}</div></div><div class="setting-row setup-setting"><div class="setting-copy"><strong>Navigation layout</strong><small>Choose comfortable labels or a compact sidebar.</small></div><select id="setup-compact" class="select-control"><option value="comfortable" ${!state.compact?'selected':''}>Comfortable</option><option value="compact" ${state.compact?'selected':''}>Compact</option></select></div><div class="setting-row setup-setting"><div class="setting-copy"><strong>Motion effects</strong><small>Keep interface transitions and animations enabled.</small></div><select id="setup-motion" class="select-control"><option value="full" ${!state.reduceMotion?'selected':''}>Enabled</option><option value="reduced" ${state.reduceMotion?'selected':''}>Reduced motion</option></select></div>`;
+      if(step===3) {
+        const choices=await storageChoices(state.unit);
+        if(choices.length && !choices.includes(state.amount)){state.amount=choices.reduce((best,value)=>Math.abs(value-state.amount)<Math.abs(best-state.amount)?value:best,choices[0]);}
+        body=`<div class="setup-step-copy"><div class="page-kicker">STEP 3 OF ${total}</div><h2>Choose your storage cap</h2><p>Flora uses a logical limit inside browser storage. It does not reserve disk space; the browser can impose a lower quota.</p></div><div class="storage-setup-grid"><div class="form-field"><label for="setup-unit">Storage unit</label><select id="setup-unit" class="select-control"><option value="KB" ${state.unit==='KB'?'selected':''}>Kilobytes (KB)</option><option value="MB" ${state.unit==='MB'?'selected':''}>Megabytes (MB)</option><option value="GB" ${state.unit==='GB'?'selected':''}>Gigabytes (GB)</option></select></div><div class="form-field"><label for="setup-amount">Capacity</label><select id="setup-amount" class="select-control" ${choices.length?'':'disabled'}>${choices.map(amount=>`<option value="${amount}" ${amount===state.amount?'selected':''}>${amount} ${state.unit}</option>`).join('')||`<option value="">No capacity available</option>`}</select></div></div><div class="setup-storage-note">Available choices follow powers of two: 16, 32, 64, 128 and onward, bounded by the browser quota estimate.</div>`;
+      }
+      if(step===4)body=`<div class="setup-step-copy"><div class="page-kicker">STEP 4 OF ${total}</div><h2>Your workspace is ready</h2><p>Review the local-first defaults before entering Flora.</p></div><div class="setup-review-grid"><div class="setup-review"><span class="setup-review-label">PROFILE</span><strong>${esc(state.name)}</strong><small>Cursor colour saved in your profile</small></div><div class="setup-review"><span class="setup-review-label">STORAGE CAP</span><strong>${state.amount} ${state.unit}</strong><small>Logical limit in this browser</small></div><div class="setup-review"><span class="setup-review-label">WORKSPACE</span><strong>${state.compact?'Compact':'Comfortable'} navigation</strong><small>${state.reduceMotion?'Reduced':'Full'} motion effects</small></div><div class="setup-review"><span class="setup-review-label">PRIVACY</span><strong>Stored locally</strong><small>No Flora account, analytics or cloud storage.</small></div></div><p class="setup-privacy-note">Your profile details can be updated at any time from the profile menu.</p>`;
+      const progress=Array.from({length:total},(_,i)=>`<span class="setup-progress-segment ${i<step?'complete':''}"></span>`).join('');
+      showModal(`<div class="setup-modal"><div class="setup-brand"><strong>flora</strong><span>LOCAL CREATIVE WORKSPACE</span></div><div class="setup-progress">${progress}</div>${body}<div class="setup-footer">${step>1?'<button type="button" class="btn btn-ghost" id="setup-back">Back</button>':'<span class="form-hint">You can change these choices later.</span>'}<button type="button" class="btn btn-primary" id="setup-next">${step===total?(isNewProfile?'Create profile':'Enter Flora'):'Continue'}</button></div></div>`, 'Flora setup', true);
+      $('#setup-name')?.addEventListener('input',event=>state.name=event.target.value);
+      $('#setup-bio')?.addEventListener('input',event=>state.bio=event.target.value);
+      $('#setup-color')?.addEventListener('input',event=>state.color=event.target.value);
+      $('#setup-compact')?.addEventListener('change',event=>state.compact=event.target.value==='compact');
+      $('#setup-motion')?.addEventListener('change',event=>state.reduceMotion=event.target.value==='reduced');
+      $('#setup-unit')?.addEventListener('change',async event=>{const previousBytes=bytesFor(state.unit,state.amount);state.unit=event.target.value;const multiplier=state.unit==='GB'?1024**3:state.unit==='MB'?1024**2:1024;const amount=$('#setup-amount');const values=await storageChoices(state.unit);amount.innerHTML=values.map(value=>`<option value="${value}">${value} ${state.unit}</option>`).join('')||'<option value="">No capacity available</option>';amount.disabled=!values.length;if(values.length){const target=previousBytes/multiplier;state.amount=values.reduce((best,value)=>Math.abs(value-target)<Math.abs(best-target)?value:best,values[0]);amount.value=String(state.amount);}});
+      $('#setup-amount')?.addEventListener('change',event=>state.amount=Number(event.target.value));
+      $$('[data-setup-accent]').forEach(button=>button.addEventListener('click',()=>{state.accent=button.dataset.setupAccent;render();}));
+      $('#setup-back')?.addEventListener('click',()=>{step=Math.max(1,step-1);render();});
+      $('#setup-next')?.addEventListener('click',async()=>{
+        if(step===1&&!state.name.trim()){toast('Enter a display name to continue.','error');$('#setup-name')?.focus();return;}
+        if(step===3&&!state.amount){toast('Choose a storage capacity to continue.','error');return;}
+        if(step<total){step++;render();return;}
+        const newProfile={id:uid(),name:state.name.trim(),pronouns:'',bio:state.bio.trim(),color:state.color,createdAt:now()};
+        profiles.push(newProfile);await putRecord('profiles',newProfile);profile=newProfile;await setMeta('activeProfileId',profile.id);
+        if(!isNewProfile){settings={...settings,accent:state.accent,compactMode:state.compact,reduceMotion:state.reduceMotion,storageUnit:state.unit,storageAmount:state.amount,storageLimitBytes:bytesFor(state.unit,state.amount)};await saveSettings();}
+        closeModal();syncProfileHeader();setupChannel();updateStorageUI();setActiveView('home');toast(`Welcome to Flora, ${profile.name.split(' ')[0]}.`,'success');
+      });
     };
-    storageQuotaBytes().then(maxBytes=>{const gb=$('#setup-unit option[value="GB"]');if(gb)gb.disabled=maxBytes<16*1024**3;});
-    $('#setup-unit')?.addEventListener('change',event=>refreshSetupAmounts(event.target.value));
-    if(!isNewProfile)refreshSetupAmounts($('#setup-unit').value);
-    $('#setup-form').addEventListener('submit',async event=>{
-      event.preventDefault();const name=$('#setup-name').value.trim();if(!name)return;
-      const newProfile={id:uid(),name,pronouns:$('#setup-pronouns').value.trim(),bio:$('#setup-bio').value.trim(),color:$('#setup-color').value,createdAt:now()};
-      profiles.push(newProfile);await putRecord('profiles',newProfile);profile=newProfile;await setMeta('activeProfileId',profile.id);
-      if(!isNewProfile){const unit=$('#setup-unit').value;const amount=Number($('#setup-amount').value)||64;settings={...settings,storageUnit:unit,storageAmount:amount,storageLimitBytes:amount*(unit==='GB'?1024**3:unit==='MB'?1024**2:1024)};await saveSettings();}
-      closeModal();syncProfileHeader();updateStorageUI();setActiveView('home');
-      toast(`Welcome to Flora, ${profile.name.split(' ')[0]}.`, 'success');
-    });
+    render();
   }
   async function showProfileSwitcher() {
-    const html=`<div class="modal-flower">✿</div><h2>Your local profiles</h2><p>Switch between profiles stored in this browser, or create another one.</p><div class="profile-list">${profiles.map(item=>`<button class="profile-option" data-switch-profile="${item.id}"><span class="avatar" style="--avatar-color:${esc(item.color)}">${esc(item.name.slice(0,1).toUpperCase())}</span><span style="flex:1"><strong>${esc(item.name)}</strong><small>${esc(item.pronouns||'Local profile')}${item.bio?' · '+esc(item.bio.slice(0,72)):''}${item.id===profile.id?' · Current profile':''}</small></span>${item.id===profile.id?'<span class="tag">Active</span>':''}</button>`).join('')}</div><div class="form-foot"><button class="btn btn-secondary" data-new-profile>＋ New profile</button><span style="flex:1"></span><button class="btn btn-ghost btn-small" data-edit-profile>Edit current profile</button><button class="btn btn-ghost" data-modal-close>Close</button></div>`;
+    const html=`<h2>Your local profiles</h2><p>Switch between profiles stored in this browser, or create another one.</p><div class="profile-list">${profiles.map(item=>`<button class="profile-option" data-switch-profile="${item.id}"><span class="avatar" style="--avatar-color:${esc(item.color)}">${esc(item.name.slice(0,1).toUpperCase())}</span><span style="flex:1"><strong>${esc(item.name)}</strong><small>Local profile${item.bio?' · '+esc(item.bio.slice(0,72)):''}${item.id===profile.id?' · Current profile':''}</small></span>${item.id===profile.id?'<span class="tag">Active</span>':''}</button>`).join('')}</div><div class="form-foot"><button class="btn btn-secondary" data-new-profile>Create profile</button><span style="flex:1"></span><button class="btn btn-ghost btn-small" data-edit-profile>Edit current profile</button><button class="btn btn-ghost" data-modal-close>Close</button></div>`;
     showModal(html,'Profiles');
     $$('[data-switch-profile]').forEach(button=>button.addEventListener('click',async()=>{const next=profiles.find(item=>item.id===button.dataset.switchProfile);if(!next)return;profile=next;await setMeta('activeProfileId',profile.id);syncProfileHeader();closeModal();setActiveView('home');toast(`Switched to ${profile.name}`,'success');}));
     $('[data-new-profile]')?.addEventListener('click',()=>showSetupModal(true));
@@ -735,7 +1017,7 @@
   }
   function showProfileEditor() {
     flushCurrentContent();
-    showModal(`<div class="modal-flower">✿</div><h2>Edit profile</h2><p>Update your local display name, pronouns, bio and collaborator cursor colour.</p><form id="profile-edit-form"><div class="form-grid"><div class="form-field full"><label for="edit-profile-name">Name</label><input id="edit-profile-name" required maxlength="60" value="${esc(profile.name)}"></div><div class="form-field"><label for="edit-profile-pronouns">Pronouns (optional)</label><input id="edit-profile-pronouns" maxlength="30" value="${esc(profile.pronouns||'')}"></div><div class="form-field"><label for="edit-profile-color">Favourite cursor colour</label><input id="edit-profile-color" type="color" value="${esc(profile.color)}" style="height:39px;padding:4px"></div><div class="form-field full"><label for="edit-profile-bio">Bio (optional)</label><textarea id="edit-profile-bio" maxlength="240">${esc(profile.bio||'')}</textarea></div></div><div class="form-foot"><button class="btn btn-ghost" type="button" data-modal-close>Cancel</button><button class="btn btn-primary" type="submit">Save profile</button></div></form>`, 'Edit profile');
+    showModal(`<div class="profile-settings-kicker">PROFILE SETTINGS</div><h2>Edit profile</h2><p>Update your local display name, pronouns, bio and collaborator cursor colour.</p><form id="profile-edit-form"><div class="form-grid"><div class="form-field full"><label for="edit-profile-name">Name</label><input id="edit-profile-name" required maxlength="60" value="${esc(profile.name)}"></div><div class="form-field"><label for="edit-profile-pronouns">Pronouns (optional)</label><input id="edit-profile-pronouns" maxlength="30" value="${esc(profile.pronouns||'')}"></div><div class="form-field"><label for="edit-profile-color">Favourite cursor colour</label><input id="edit-profile-color" type="color" value="${esc(profile.color)}" style="height:39px;padding:4px"></div><div class="form-field full"><label for="edit-profile-bio">Bio (optional)</label><textarea id="edit-profile-bio" maxlength="240">${esc(profile.bio||'')}</textarea></div></div><div class="form-foot"><button class="btn btn-ghost" type="button" data-modal-close>Cancel</button><button class="btn btn-primary" type="submit">Save profile</button></div></form>`, 'Edit profile');
     $('#profile-edit-form').addEventListener('submit',async event=>{
       event.preventDefault();
       if(currentView==='editor' && activeFile) await saveCurrentContent('editing');
@@ -749,10 +1031,10 @@
 
   function showCollaborationModal() {
     const canBroadcast=!!channel;
-    showModal(`<div class="modal-flower">⌁</div><h2>Collaborate locally</h2><p>Flora’s no-server collaboration uses your browser’s local BroadcastChannel.</p><div class="collab-explainer"><strong>How to test it</strong><br>1. Open this same Flora address in a second tab or window.<br>2. Switch to a different local profile in that tab (or create one).<br>3. Open the same file. Typing and file updates will sync between the tabs, and cursor activity will show the collaborator’s first name and favourite colour.</div><div class="setting-row"><div class="setting-copy"><strong>Collaboration channel</strong><small>${canBroadcast?'BroadcastChannel is available in this browser.':'BroadcastChannel is unavailable; live tab sync is disabled.'}</small></div><span class="tag">${canBroadcast?'Available':'Unavailable'}</span></div><p class="small-print">This does not share a file with another person over the internet. For remote collaboration, Flora would need a hosted sync service, accounts, permissions and a secure transport layer.</p><div class="form-foot"><button class="btn btn-ghost" data-modal-close>Close</button><button class="btn btn-primary" data-modal-close>Got it</button></div>`, 'Local collaboration');
+    showModal(`<h2>Collaborate locally</h2><p>Flora’s no-server collaboration uses your browser’s local BroadcastChannel.</p><div class="collab-explainer"><strong>How to test it</strong><br>1. Open this same Flora address in a second tab or window.<br>2. Switch to a different local profile in that tab (or create one).<br>3. Open the same file. Typing and file updates will sync between the tabs, and cursor activity will show the collaborator’s first name and favourite colour.</div><div class="setting-row"><div class="setting-copy"><strong>Collaboration channel</strong><small>${canBroadcast?'BroadcastChannel is available in this browser.':'BroadcastChannel is unavailable; live tab sync is disabled.'}</small></div><span class="tag">${canBroadcast?'Available':'Unavailable'}</span></div><p class="small-print">This does not share a file with another person over the internet. For remote collaboration, Flora would need a hosted sync service, accounts, permissions and a secure transport layer.</p><div class="form-foot"><button class="btn btn-ghost" data-modal-close>Close</button><button class="btn btn-primary" data-modal-close>Got it</button></div>`, 'Local collaboration');
   }
   function showHelpModal() {
-    showModal(`<div class="modal-flower">✿</div><h2>A few Flora tips</h2><p>Your workspace is local-first, so the important bits are simple.</p><div class="setting-row"><div class="setting-copy"><strong>Keyboard shortcuts</strong><small>Ctrl / ⌘ + S saves the open file. Ctrl / ⌘ + N starts a document. Esc closes a dialog.</small></div></div><div class="setting-row"><div class="setting-copy"><strong>Export regularly</strong><small>Use Export in an editor or Fern Files to make a portable copy of your work.</small></div></div><div class="setting-row"><div class="setting-copy"><strong>Collaboration</strong><small>Use the same local Flora address in two tabs/windows to test local sync.</small></div></div><div class="setting-row"><div class="setting-copy"><strong>Back up this browser</strong><small>Browser data can be cleared by browser settings, private browsing or storage pressure. Export important files somewhere safe.</small></div></div><div class="form-foot"><span class="form-hint">Flora runs without a backend.</span><button class="btn btn-primary" data-modal-close>Lovely</button></div>`,'Help');
+    showModal(`<h2>A few Flora tips</h2><p>Your workspace is local-first, so the important bits are simple.</p><div class="setting-row"><div class="setting-copy"><strong>Keyboard shortcuts</strong><small>Ctrl + S saves the open file. Ctrl + N starts a document (use Command on Mac). Esc closes a dialog.</small></div></div><div class="setting-row"><div class="setting-copy"><strong>Export regularly</strong><small>Use Export in an editor or My files to make a portable copy of your work.</small></div></div><div class="setting-row"><div class="setting-copy"><strong>Collaboration</strong><small>Use the same local Flora address in two tabs/windows to test local sync.</small></div></div><div class="setting-row"><div class="setting-copy"><strong>Back up this browser</strong><small>Browser data can be cleared by browser settings, private browsing or storage pressure. Export important files somewhere safe.</small></div></div><div class="form-foot"><span class="form-hint">Flora runs without a backend.</span><button class="btn btn-primary" data-modal-close>Lovely</button></div>`,'Help');
   }
 
   function renderView() {
@@ -761,6 +1043,8 @@
     if(currentView==='files')return renderFiles();
     if(currentView==='shared')return renderShared();
     if(currentView==='storage')return renderStorage();
+    if(currentView==='tools')return renderTools();
+    if(currentView==='amethyst')return renderAmethyst();
     if(currentView==='tasks')return renderTasks();
     if(currentView==='focus')return renderFocus();
     if(currentView==='settings')return renderSettings();
@@ -779,16 +1063,23 @@
     if(target.matches('[data-settings-tab]')){settingsTab=target.dataset.settingsTab;renderSettings();return;}
     if(target.matches('[data-setting-toggle]')){const key=target.dataset.settingToggle;settings[key]=!settings[key];await saveSettings();renderSettings();return;}
     if(target.matches('[data-accent]')){settings.accent=target.dataset.accent;await saveSettings();renderSettings();return;}
-    if(target.matches('[data-format]')){const editor=$('#document-editor');editor?.focus();document.execCommand(target.dataset.format,false,null);if(editor)scheduleSave('editing');return;}
+    if(target.matches('[data-format]')){const editor=$('#document-editor');editor?.focus();const command=target.dataset.format;if(command==='createLink'){const url=prompt('Enter a link URL');if(url)document.execCommand(command,false,url);}else document.execCommand(command,false,null);if(editor)scheduleSave('editing');return;}
     if(target.matches('[data-slide-index]')){slideIndex=Number(target.dataset.slideIndex);renderSlide();broadcastPresence('selecting');return;}
     if(target.matches('[data-action]')){
       const action=target.dataset.action;
       if(action==='import')showImportModal();
-      if(action==='explore')document.querySelector('[data-app="daisy"]')?.click();
-      if(action==='new-file')showModal(`<div class="modal-flower">✿</div><h2>What would you like to make?</h2><p>Choose a Flora workspace.</p><div class="app-grid" style="grid-template-columns:repeat(2,1fr)">${appCard('doc','Daisy Docs','Write and format')}${appCard('sheet','Poppy Sheets','Tables and formulas')}${appCard('slides','Iris Slides','Present your ideas')}${appCard('note','Clover Notes','Quick thoughts')}${appCard('board','Aster Board','Sticky-note canvas')}</div><div class="form-foot"><button class="btn btn-ghost" data-modal-close>Cancel</button></div>`, 'Create a file', true);
+      if(action==='explore')setActiveView('tools');
+      if(action==='new-file')showModal(`<h2>What would you like to make?</h2><p>Choose a Flora workspace.</p><div class="app-grid" style="grid-template-columns:repeat(2,1fr)">${appCard('doc','Azalea Docs','Write and format')}${appCard('sheet','Amaryllis Sheets','Tables and formulas')}${appCard('slides','Iris Presentations','Present your ideas')}${appCard('note','Anemone Notes','Quick thoughts')}${appCard('board','Dahlia Boards','Arrange ideas')}</div><div class="form-foot"><button class="btn btn-ghost" data-modal-close>Cancel</button></div>`, 'Create a file', true);
       if(action==='back-files'){setActiveView('files');}
       if(action==='export-active'&&activeFile)showExportModal(activeFile);
       if(action==='collaborate')showCollaborationModal();
+      if(action==='edit-profile')showProfileEditor();
+      if(action==='amethyst-create-offer'){try{await amethystCreateOffer();}catch(error){toast('Could not create offer: '+error.message,'error');}}
+      if(action==='amethyst-create-answer'){try{await amethystCreateAnswer();}catch(error){toast('Could not create answer: '+error.message,'error');}}
+      if(action==='amethyst-apply-answer'){try{await amethystApplyAnswer();}catch(error){toast('Could not connect: '+error.message,'error');}}
+      if(action==='amethyst-copy-offer')await amethystCopy('amethyst-offer-output');
+      if(action==='amethyst-copy-answer')await amethystCopy('amethyst-answer-output');
+      if(action==='amethyst-reset'){resetAmethyst();setAmethystStatus('Not connected','Connection reset.');const status=$('#amethyst-transfer-state');if(status)status.textContent='Waiting for a connection. The received file will be saved to My files.';toast('Amethyst connection reset.');}
       if(action==='rename-active'&&activeFile){const value=$('#editor-title')?.value.trim();if(value)await renameFile(activeFile.id,value);}
       if(action==='export-csv'&&activeFile?.type==='sheet')exportFile(activeFile,'csv');
       if(action==='add-row'&&activeFile?.type==='sheet'){activeFile.content.rows=(activeFile.content.rows||20)+1;renderSheetGrid();scheduleSave('adding');}
@@ -810,7 +1101,7 @@
     }
     if(target.matches('[data-menu-file]')){
       const file=files.find(f=>f.id===target.dataset.menuFile);if(!file)return;
-      showModal(`<div class="modal-flower">•••</div><h2>${esc(file.name)}</h2><p>File actions</p><div class="setting-row"><div class="setting-copy"><strong>Rename</strong><small>Give this file a new name.</small></div><button class="btn btn-secondary btn-small" id="file-rename">Rename</button></div><div class="setting-row"><div class="setting-copy"><strong>Export</strong><small>Download a copy in a supported format.</small></div><button class="btn btn-secondary btn-small" id="file-export">Export</button></div><div class="setting-row"><div class="setting-copy"><strong>Delete</strong><small>Remove this file from local storage.</small></div><button class="btn btn-danger btn-small" id="file-delete">Delete</button></div><div class="form-foot"><button class="btn btn-ghost" data-modal-close>Close</button></div>`, 'File actions');
+      showModal(`<h2>${esc(file.name)}</h2><p>File actions</p><div class="setting-row"><div class="setting-copy"><strong>Rename</strong><small>Give this file a new name.</small></div><button class="btn btn-secondary btn-small" id="file-rename">Rename</button></div><div class="setting-row"><div class="setting-copy"><strong>Export</strong><small>Download a copy in a supported format.</small></div><button class="btn btn-secondary btn-small" id="file-export">Export</button></div><div class="setting-row"><div class="setting-copy"><strong>Delete</strong><small>Remove this file from local storage.</small></div><button class="btn btn-danger btn-small" id="file-delete">Delete</button></div><div class="form-foot"><button class="btn btn-ghost" data-modal-close>Close</button></div>`, 'File actions');
       $('#file-rename').onclick=async()=>{const name=prompt('New file name',file.name);if(name)await renameFile(file.id,name);closeModal();};
       $('#file-export').onclick=()=>{closeModal();showExportModal(file);};
       $('#file-delete').onclick=()=>{closeModal();deleteFile(file.id);};
@@ -842,10 +1133,14 @@
     if(event.target.id==='block-format'){
       const editor=$('#document-editor');if(editor){editor.focus();document.execCommand('formatBlock',false,`<${event.target.value}>`);scheduleSave('editing');}return;
     }
+    if(event.target.id==='font-face'){const editor=$('#document-editor');if(editor){editor.focus();document.execCommand('fontName',false,event.target.value);scheduleSave('editing');}return;}
+    if(event.target.id==='font-size'){const editor=$('#document-editor');if(editor){editor.focus();document.execCommand('fontSize',false,event.target.value);scheduleSave('editing');}return;}
+    if(event.target.id==='font-color'){const editor=$('#document-editor');if(editor){editor.focus();document.execCommand('foreColor',false,event.target.value);scheduleSave('editing');}return;}
+    if(event.target.id==='highlight-color'){const editor=$('#document-editor');if(editor){editor.focus();document.execCommand('hiliteColor',false,event.target.value);scheduleSave('editing');}return;}
     if(event.target.id==='file-filter'){
       const query=$('#file-search')?.value||'';const type=event.target.value;
       const visible=[...files].sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt)).filter(f=>(f.name.toLowerCase().includes(query.toLowerCase())||fileInfo[f.type].label.toLowerCase().includes(query.toLowerCase()))&&(type==='all'||f.type===type));
-      $('#file-list-region').innerHTML=visible.length?`<div class="file-grid">${visible.map(file=>`<div class="file-card"><div class="file-card-head">${fileIcon(file)}<button class="btn btn-ghost btn-small" data-menu-file="${file.id}">•••</button></div><div class="file-card-title">${esc(file.name)}</div><div class="file-card-meta">${fileInfo[file.type].short} · ${prettyDate(file.updatedAt)}</div><div class="file-card-actions"><button class="btn btn-secondary btn-small" data-open="${file.id}">Open</button><button class="btn btn-ghost btn-small" data-export="${file.id}">Export ↓</button></div></div>`).join('')}</div>`:`<div class="panel"><div class="empty-state"><h3>No matching files</h3><p>Try another filter.</p></div></div>`;
+      $('#file-list-region').innerHTML=visible.length?`<div class="file-grid">${visible.map(file=>`<div class="file-card"><div class="file-card-head">${fileIcon(file)}<button class="btn btn-ghost btn-small" data-menu-file="${file.id}">Options</button></div><div class="file-card-title">${esc(file.name)}</div><div class="file-card-meta">${fileInfo[file.type].short} · ${prettyDate(file.updatedAt)}</div><div class="file-card-actions"><button class="btn btn-secondary btn-small" data-open="${file.id}">Open</button><button class="btn btn-ghost btn-small" data-export="${file.id}">Export</button></div></div>`).join('')}</div>`:`<div class="panel"><div class="empty-state"><h3>No matching files</h3><p>Try another filter.</p></div></div>`;
     }
     if(event.target.matches('[data-task-toggle]')){const index=Number(event.target.dataset.taskToggle);if(window._floraTasks[index]){window._floraTasks[index].done=event.target.checked;await setMeta('tasks',window._floraTasks);renderTasks();}return;}
     if(event.target.id==='storage-unit'){await populateStorageAmount();}
@@ -903,6 +1198,7 @@
   $('#top-profile').addEventListener('click',showProfileSwitcher);
   $('#help-button').addEventListener('click',showHelpModal);
   $('#mobile-menu').addEventListener('click',()=>$('#sidebar').classList.toggle('open'));
+  $('#sidebar-compact-toggle').addEventListener('click',async()=>{settings.compactMode=!settings.compactMode;await saveSettings();toast(settings.compactMode?'Compact sidebar enabled.':'Comfortable sidebar enabled.');});
   document.addEventListener('selectionchange',()=>{
     const editor=$('#document-editor');
     if(editor && document.activeElement===editor && !window._floraSelectionPing){
