@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7edca">
+  <meta name="description" content="Flora — an offline-first workspace for documents, spreadsheets, presentations, study tools and more.">
+  <title>Flora — your creative workspace</title>
+  <script>
+    /* Restore the last theme and startup preference before first paint, so there is no flash. */
+    (function () {
+      try {
+        var theme = localStorage.getItem('flora-theme');
+        if (theme) document.documentElement.dataset.theme = theme;
+        if (localStorage.getItem('flora-splash') === '0') document.documentElement.dataset.splash = 'off';
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="features.css">
+</head>
+<body>
+  <div class="splash" id="splash" aria-hidden="true"><div class="splash-mark">flora<span>.</span></div><div class="splash-bar"><span></span></div></div>
+
+  <div id="app" class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-lockup">
+        <div class="brand-copy"><div class="brand-name">flora<span>.</span></div><div class="brand-caption">creative workspace</div></div>
+        <button class="sidebar-compact-toggle" id="sidebar-compact-toggle" type="button" aria-label="Toggle compact sidebar" aria-pressed="false">Compact</button>
+      </div>
+      <button class="profile-switcher" id="profile-switcher" type="button" aria-label="Open profile settings">
+        <span class="avatar" id="profile-avatar">F</span>
+        <span class="profile-switcher-copy"><strong id="profile-name">Your profile</strong><small id="profile-status">Local profile</small></span>
+        <span class="chevron">Profile</span>
+      </button>
+      <div class="sidebar-scroll" id="sidebar-nav"></div>
+      <div class="sidebar-bottom">
+        <button class="storage-mini" data-view="storage" type="button" aria-label="Open storage">
+          <span class="storage-mini-head"><span>Storage</span><strong id="storage-percent">0%</strong></span>
+          <span class="progress-track" id="storage-track"><span id="storage-progress"></span><span id="storage-progress-new"></span></span>
+          <small id="storage-caption">Checking your space…</small>
+        </button>
+        <button class="nav-item settings-nav" data-view="settings"><span class="nav-short">ST</span><span class="nav-copy">Settings</span></button>
+        <div class="sidebar-footer"><span>Stored on this device</span></div>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobile-menu" aria-label="Toggle navigation">Menu</button>
+        <div class="breadcrumb"><span id="crumb-parent">Workspace</span><span class="crumb-slash">/</span><strong id="crumb-current">Home</strong></div>
+        <div class="topbar-actions">
+          <button class="mode-chip" id="mode-chip" type="button" title="Switch mode">Standard</button>
+          <div class="online-status"><span>Offline ready</span></div>
+          <button class="help-button" id="palette-button" title="Search everything (Ctrl+K)" aria-label="Search">Search <span class="kbd">Ctrl K</span></button>
+          <button class="help-button" id="help-button" title="Help and shortcuts" aria-label="Help">Help</button>
+          <button class="top-profile" id="top-profile" title="Profile settings"><span class="avatar avatar-small" id="top-avatar">F</span></button>
+        </div>
+      </header>
+      <div id="view-root" class="view-root"></div>
+    </main>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+
+  <script src="export-formats.js"></script>
+  <script src="encoding.js"></script>
+  <script src="presets.js"></script>
+  <script src="app.js"></script>
+  <script src="apps.js"></script>
+  <script src="tools.js"></script>
+  <script src="settings.js"></script>
+  <script src="storage.js"></script>
+  <script src="setup.js"></script>
+</body>
+</html>
