@@ -1,3 +1,7 @@
+# If you cant see deployments...
+
+Enter flora here: https://asterisk-e.github.io/Flora/
+
 # Flora — offline-first creative workspace
 
 Flora is a dependency-free HTML, CSS and JavaScript workspace for local documents, spreadsheets, presentations, notes, boards and utilities. It stores profiles and files in this browser using IndexedDB (with a localStorage fallback). There is no Flora account, cloud file store or analytics endpoint.
