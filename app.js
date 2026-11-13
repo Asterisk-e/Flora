@@ -7,6 +7,16 @@
   const uid = () => (crypto?.randomUUID ? crypto.randomUUID() : `flora-${Date.now()}-${Math.random().toString(16).slice(2)}`);
   const now = () => new Date().toISOString();
   const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  const FONT_STACKS = {
+    serif:"'Newsreader',Georgia,'Times New Roman',serif",
+    sans:"system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif",
+    mono:"ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace",
+    readable:"Verdana,'Trebuchet MS','Segoe UI',Tahoma,Geneva,sans-serif"
+  };
+  const hexToRgb = hex => { const h = String(hex).replace('#',''); const f = h.length === 3 ? h.split('').map(c => c + c).join('') : h; return [parseInt(f.slice(0,2),16), parseInt(f.slice(2,4),16), parseInt(f.slice(4,6),16)]; };
+  const rgbToHex = (r,g,b) => '#' + [r,g,b].map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2,'0')).join('');
+  const mixHex = (a, b, amount) => { const A = hexToRgb(a), B = hexToRgb(b); return rgbToHex(A[0] + (B[0]-A[0])*amount, A[1] + (B[1]-A[1])*amount, A[2] + (B[2]-A[2])*amount); };
+  const luminance = hex => { const [r,g,b] = hexToRgb(hex).map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); }); return .2126*r + .7152*g + .0722*b; };
   const prettyDate = value => new Intl.DateTimeFormat(undefined, { dateStyle:'medium', timeStyle:'short' }).format(new Date(value));
   const formatBytes = bytes => {
     if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
@@ -16,17 +26,52 @@
     return `${n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1) : n.toFixed(2)} ${units[i]}`;
   };
   const fileInfo = {
-    doc: { label:'Azalea Docs', short:'Document', icon:'', color:'#f5e7bb', extensions:['docx','html','doc','txt','md'] },
-    sheet: { label:'Amaryllis Sheets', short:'Spreadsheet', icon:'', color:'#f1dfd7', extensions:['xlsx','csv','json','html'] },
-    slides: { label:'Iris Presentations', short:'Presentation', icon:'', color:'#e5e3ef', extensions:['pptx','html','json'] },
-    note: { label:'Anemone Notes', short:'Note', icon:'', color:'#e4eadc', extensions:['txt','md','html'] },
-    board: { label:'Dahlia Boards', short:'Board', icon:'', color:'#eae2ee', extensions:['json','html'] }
+    doc: { label:'Azalea Docs', short:'Document', icon:'', color:'#f5e7bb', extensions:['docx','html','doc','txt','md'], glyph:'AZ', blurb:'Write, format and export documents', landing:'A page-focused writing workspace with familiar formatting controls.' },
+    sheet: { label:'Amaryllis Sheets', short:'Spreadsheet', icon:'', color:'#f1dfd7', extensions:['xlsx','csv','json','html'], glyph:'AM', blurb:'Tables, calculations and data', landing:'Organise information, calculate totals and inspect your data.' },
+    slides: { label:'Iris Presentations', short:'Presentation', icon:'', color:'#e5e3ef', extensions:['pptx','html','json'], glyph:'IR', blurb:'Build clear presentations', landing:'Turn an outline into a clear presentation.' },
+    note: { label:'Anemone Notes', short:'Note', icon:'', color:'#e4eadc', extensions:['txt','md','html'], glyph:'AN', blurb:'Capture quick thoughts', landing:'Keep short notes and working thoughts close at hand.' },
+    board: { label:'Dahlia Boards', short:'Board', icon:'', color:'#eae2ee', extensions:['json','html'], glyph:'DA', blurb:'Arrange ideas on a canvas', landing:'Arrange ideas, references and plans on a freeform board.' }
   };
   const appTypes = ['doc','sheet','slides','note','board'];
+  const appRegistry = new Map();   // extra file-based applications (apps.js)
+  const toolRegistry = new Map();  // extra tools (tools.js)
+  const viewRegistry = new Map();  // any routable view: { render(root), crumb:[parent,current], navParent }
+  const builtinTools = [
+    { id:'amethyst', title:'Amethyst', short:'AM', cat:'Share', label:'Peer-to-peer transfer', desc:'Send Flora files directly to another person on your local network.' },
+    { id:'tasks', title:'Rowan Tasks', short:'RT', cat:'Plan', label:'Planning', desc:'Keep a lightweight checklist alongside your projects.' },
+    { id:'focus', title:'Camellia Focus', short:'CF', cat:'Focus', label:'Focus', desc:'A focus and break timer with a progress ring and a soft chime.' },
+    { id:'storage', title:'Flora Storage', short:'ST', cat:'Files', label:'Storage', desc:'See what uses your space, free some up and manage your storage cap.' }
+  ];
+  function registerApp(def) {
+    fileInfo[def.type] = { label:def.label, short:def.short, icon:'', color:def.color || '#eee', extensions:def.extensions, glyph:def.glyph, blurb:def.blurb, landing:def.landing };
+    if (!appTypes.includes(def.type)) appTypes.push(def.type);
+    appRegistry.set(def.type, def);
+  }
+  function registerTool(def) {
+    toolRegistry.set(def.id, def);
+    viewRegistry.set(def.id, { render:def.render, crumb:['Tools', def.title], navParent:'tools', leave:def.leave });
+  }
+  function registerView(id, def) { viewRegistry.set(id, def); }
+  function allTools() {
+    return [...builtinTools, ...[...toolRegistry.values()].map(t => ({ id:t.id, title:t.title, short:t.short || t.title.slice(0,2).toUpperCase(), cat:t.cat || 'Utilities', label:t.label || t.cat || 'Tool', desc:t.desc || '' }))];
+  }
   const defaultSettings = {
     autosave:true, confirmDelete:true, largeText:false, highContrast:false, reduceMotion:false,
     accent:'#e9c96b', storageLimitBytes:64 * 1024 * 1024, storageUnit:'MB', storageAmount:64,
-    compactMode:false, spellcheck:true, localOnly:true
+    compactMode:false, spellcheck:true, localOnly:true,
+    // look and feel
+    theme:'light', fontFamily:'serif', textScale:100, density:'comfortable', bigTargets:false, underlineLinks:false, readableSpacing:false,
+    // motion
+    animLevel:'full', animSpeed:1, pageTransition:'rise', startupAnim:true, ripple:true, countUp:true,
+    // text and encoding
+    exportEncoding:'utf-8', importEncoding:'auto', asciiFallback:'transliterate', lineEndings:'keep', csvBom:true,
+    // files
+    autosaveDelay:450, defaultView:'home', sortFiles:'recent', showHomeHero:true, showHomeStats:true, showToday:true,
+    // focus and notifications
+    focusMinutes:25, breakMinutes:5, soundOn:true, quietToasts:false, toastSeconds:3.4,
+    // modes
+    modeId:'standard', pinnedApps:['doc','sheet','slides','note','board','code','sketch','cards','kanban','journal'],
+    pinnedTools:['tasks','focus','amethyst'], examLock:false, modeUndo:null, backupReminderDays:0, lastBackupAt:null
   };
 
   let db = null;
@@ -120,10 +165,13 @@
     const record = await idbRequest('meta', 'get', key);
     return record ? record.value : fallback;
   }
-  async function setMeta(key, value) { return putRecord('meta', { key, value }); }
+  const metaSizes = {};   // bytes used by tasks and tool data, kept in step with the database
+  const trackedMeta = key => key === 'tasks' || key.startsWith('tool:');
+  async function setMeta(key, value) { if (trackedMeta(key)) metaSizes[key] = JSON.stringify(value ?? '').length; return putRecord('meta', { key, value }); }
   async function loadAll() {
     [profiles, files] = await Promise.all([getAll('profiles'), getAll('files')]);
     settings = { ...defaultSettings, ...(await getMeta('settings', {})) };
+    for (const item of await getAll('meta')) if (trackedMeta(item.key)) metaSizes[item.key] = JSON.stringify(item.value ?? '').length;
     applySettings();
   }
 
@@ -137,8 +185,13 @@
     return { usage: 0, quota: 0 };
   }
   function localDataSize() {
-    try { return new Blob([JSON.stringify({profiles, files, settings})]).size; }
-    catch { return JSON.stringify({profiles, files, settings}).length * 2; }
+    const extra = Object.values(metaSizes).reduce((sum, n) => sum + n, 0);
+    try { return new Blob([JSON.stringify({profiles, files, settings})]).size + extra; }
+    catch { return JSON.stringify({profiles, files, settings}).length * 2 + extra; }
+  }
+  function previewSettings(patch) {
+    const keep = settings; settings = { ...settings, ...patch };
+    try { applySettings(); } finally { settings = keep; }
   }
   async function canStore(nextFile) {
     const current = files.find(file => file.id === nextFile.id);
@@ -157,24 +210,60 @@
     return true;
   }
 
+  function resolveTheme() {
+    const choice = settings.theme || 'light';
+    if (choice === 'auto') return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    return choice;
+  }
+  function systemReducesMotion() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+  function animLevel() { return (settings.reduceMotion || systemReducesMotion()) ? 'off' : (settings.animLevel || 'full'); }
+  function animOff() { return animLevel() === 'off'; }
   function applySettings() {
-    document.body.classList.toggle('large-text', !!settings.largeText);
-    document.body.classList.toggle('high-contrast', !!settings.highContrast);
-    document.body.classList.toggle('reduce-motion', !!settings.reduceMotion);
-    document.documentElement.style.setProperty('--accent', settings.accent || defaultSettings.accent);
-    document.body.classList.toggle('compact-sidebar', !!settings.compactMode);
-    const compactButton=$('#sidebar-compact-toggle');
+    const html = document.documentElement, body = document.body;
+    const theme = resolveTheme();
+    html.dataset.theme = theme;
+    html.dataset.font = settings.fontFamily || 'serif';
+    html.dataset.anim = animLevel();
+    html.dataset.transition = settings.pageTransition || 'rise';
+    html.style.setProperty('--font-ui', FONT_STACKS[settings.fontFamily] || FONT_STACKS.serif);
+    html.style.setProperty('--anim-speed', String(Math.max(.25, Math.min(3, Number(settings.animSpeed) || 1))));
+    const accent = settings.accent || defaultSettings.accent;
+    html.style.setProperty('--accent', accent);
+    html.style.setProperty('--accent-ink', luminance(accent) > .42 ? '#2f2813' : '#ffffff');
+    html.style.setProperty('--accent-soft', mixHex(accent, theme === 'dark' ? '#1c1e22' : '#ffffff', theme === 'dark' ? .78 : .8));
+    html.style.setProperty('--accent-strong', mixHex(accent, theme === 'dark' ? '#ffffff' : '#000000', theme === 'dark' ? .1 : .38));
+    const scale = Math.max(80, Math.min(160, Number(settings.textScale) || 100)) * (settings.largeText && Number(settings.textScale || 100) === 100 ? 1.13 : 1);
+    body.style.zoom = scale === 100 ? '' : String(scale / 100);
+    body.classList.toggle('high-contrast', !!settings.highContrast);
+    body.classList.toggle('reduce-motion', animLevel() === 'off');
+    body.classList.toggle('compact-sidebar', !!settings.compactMode || !!settings.examLock);
+    body.classList.toggle('density-compact', settings.density === 'compact');
+    body.classList.toggle('big-targets', !!settings.bigTargets);
+    body.classList.toggle('underline-links', !!settings.underlineLinks);
+    body.classList.toggle('readable-spacing', !!settings.readableSpacing);
+    body.classList.toggle('no-ripple', !settings.ripple);
+    body.classList.toggle('exam-lock', !!settings.examLock);
+    body.dataset.mode = settings.modeId || 'standard';
+    try { localStorage.setItem('flora-theme', theme); localStorage.setItem('flora-splash', settings.startupAnim === false ? '0' : '1'); } catch {}
+    const metaTheme = document.querySelector('meta[name="theme-color"]'); if (metaTheme) metaTheme.content = theme === 'dark' ? '#16171a' : theme === 'paper' ? '#f3ead6' : '#f7edca';
+    const compactButton = $('#sidebar-compact-toggle');
     compactButton?.setAttribute('aria-pressed', String(!!settings.compactMode));
-    if(compactButton)compactButton.textContent=settings.compactMode?'Expand':'Compact';
+    if (compactButton) compactButton.textContent = settings.compactMode ? 'Expand' : 'Compact';
+    updateModeChip();
   }
   function toast(message, kind = '') {
+    if (settings.quietToasts && kind !== 'error') return;
     const el = document.createElement('div');
     el.className = `toast ${kind}`;
     el.textContent = message;
     $('#toast-region').append(el);
-    setTimeout(() => el.remove(), 3400);
+    const ms = Math.max(1200, (Number(settings.toastSeconds) || 3.4) * 1000);
+    setTimeout(() => { el.classList.add('leaving'); setTimeout(() => el.remove(), animOff() ? 0 : 260); }, ms);
   }
-  function saveSettings() { return setMeta('settings', settings).then(() => { applySettings(); updateStorageUI(); }); }
+  function saveSettings(patch) {
+    if (patch) settings = { ...settings, ...patch };
+    return setMeta('settings', settings).then(() => { applySettings(); renderSidebar(); updateStorageUI(); });
+  }
   function currentProfileInitial() { return (profile?.name || 'F').trim().slice(0,1).toUpperCase(); }
   function syncProfileHeader() {
     if (!profile) return;
@@ -185,12 +274,54 @@
     $('#top-avatar').style.setProperty('--avatar-color', profile.color);
     $('#profile-status').textContent = 'Local profile';
   }
+  function navButton(attr, value, short, label, extra = '') {
+    return `<button class="nav-item" ${attr}="${esc(value)}"><span class="nav-short">${esc(short)}</span><span class="nav-copy">${esc(label)}</span>${extra}</button>`;
+  }
+  function renderSidebar() {
+    const host = $('#sidebar-nav'); if (!host) return;
+    const lock = !!settings.examLock;
+    const pinned = (settings.pinnedApps || []).filter(type => fileInfo[type] && appTypes.includes(type));
+    const rest = appTypes.filter(type => !pinned.includes(type));
+    const tools = allTools();
+    const pinnedTools = (settings.pinnedTools || []).map(id => tools.find(t => t.id === id)).filter(Boolean);
+    host.innerHTML = `
+      <div class="nav-label">WORKSPACE</div>
+      <nav class="main-nav" aria-label="Main navigation">
+        ${navButton('data-view', 'home', 'HM', 'Home')}
+        ${navButton('data-view', 'files', 'FI', 'My files', `<span class="nav-count" id="file-count">${files.length}</span>`)}
+        ${lock ? '' : navButton('data-view', 'shared', 'SH', 'Shared with me')}
+      </nav>
+      <div class="nav-label nav-label-spaced">CREATE</div>
+      <nav class="main-nav" aria-label="Create applications">
+        ${pinned.map(type => navButton('data-app', type, fileInfo[type].glyph || type.slice(0,2).toUpperCase(), fileInfo[type].label)).join('')}
+        ${!lock && rest.length ? `<details class="more-apps" ${rest.includes(currentApp) ? 'open' : ''}><summary class="nav-item"><span class="nav-short">+${rest.length}</span><span class="nav-copy">More applications</span></summary>${rest.map(type => navButton('data-app', type, fileInfo[type].glyph || type.slice(0,2).toUpperCase(), fileInfo[type].label)).join('')}</details>` : ''}
+      </nav>
+      <div class="nav-label nav-label-spaced">TOOLS</div>
+      <nav class="main-nav" aria-label="Tools">
+        ${lock ? '' : navButton('data-view', 'tools', 'TL', 'All tools')}
+        ${pinnedTools.map(t => navButton('data-view', t.id, t.short, t.title)).join('')}
+      </nav>`;
+    updateNav();
+  }
   function updateNav() {
-    $('#file-count').textContent = String(files.length);
+    const count = $('#file-count'); if (count) count.textContent = String(files.length);
     $$('.nav-item').forEach(button => button.classList.remove('active'));
-    if (currentApp) $(`[data-app="${currentApp}"]`)?.classList.add('active');
-    else if (currentView === 'amethyst') $('[data-view="tools"]')?.classList.add('active');
-    else $(`[data-view="${currentView}"]`)?.classList.add('active');
+    let target = null;
+    if (currentApp) target = $(`.sidebar [data-app="${currentApp}"]`);
+    else {
+      target = $(`.sidebar [data-view="${currentView}"]`);
+      if (!target) { const parent = viewRegistry.get(currentView)?.navParent || (['amethyst','tasks','focus'].includes(currentView) ? 'tools' : null); if (parent) target = $(`.sidebar [data-view="${parent}"]`); }
+    }
+    target?.classList.add('active');
+    $('.storage-mini')?.classList.toggle('active', currentView === 'storage');
+    document.body.dataset.view = currentView;
+  }
+  function updateModeChip() {
+    const chip = $('#mode-chip'); if (!chip || !window.FloraPresets) return;
+    const mode = FloraPresets.byId(settings.modeId);
+    chip.textContent = settings.examLock ? 'Exam mode · Exit' : mode.name;
+    chip.classList.toggle('is-exam', !!settings.examLock);
+    chip.title = settings.examLock ? 'Leave exam mode' : 'Switch mode';
   }
   async function updateStorageUI() {
     const usage = localDataSize();
@@ -231,8 +362,21 @@
       saveCurrentContent('editing').catch(()=>{});
     }
   }
-  function setActiveView(view, app = null) {
+  let lastView = 'home';
+  const ui = { settingsPage:'home' };
+  function playViewEnter() {
+    const root = $('#view-root'); if (!root) return;
+    const kind = settings.pageTransition || 'rise';
+    root.classList.remove('view-enter'); root.removeAttribute('data-enter');
+    if (kind === 'none' || animOff()) return;
+    void root.offsetWidth; root.dataset.enter = kind; root.classList.add('view-enter');
+  }
+  function setActiveView(view, app = null, opts = {}) {
     flushCurrentContent();
+    if (settings.examLock && ['shared','tools'].includes(view)) view = 'home';
+    if (currentView !== view || currentApp !== app) lastView = currentView === 'editor' ? 'files' : currentView;
+    viewRegistry.get(currentView)?.leave?.();
+    if (view === 'settings' && !opts.keepPage) ui.settingsPage = 'home';
     currentView = view;
     currentApp = app;
     activeFileId = null;
@@ -241,10 +385,13 @@
     peers.clear();
     updateNav();
     renderView();
+    playViewEnter();
     broadcastPresence('viewing');
     $('#sidebar').classList.remove('open');
+    window.scrollTo(0, 0);
   }
   function newFileContent(type) {
+    if (appRegistry.get(type)) return appRegistry.get(type).newContent();
     if (type === 'doc') return '<h1>Start with a thought…</h1><p></p>'; 
     if (type === 'sheet') return { cells: { A1:'', A2:'', A3:'', B1:'', B2:'', B3:'' }, rows:20, cols:12 };
     if (type === 'slides') return [{title:'A fresh idea', body:'Add a thought, a plan, or a little inspiration.'}];
@@ -255,15 +402,34 @@
   function makeFile(type, name) {
     return { id:uid(), name:name || `Untitled ${fileInfo[type].short}`, type, content:newFileContent(type), ownerId:profile.id, collaborators:[], createdAt:now(), updatedAt:now(), folder:'My files' };
   }
-  async function createFile(type, name) {
+  async function createFile(type, name, content) {
     if (!appTypes.includes(type)) return;
     const file = makeFile(type, name);
+    if (content !== undefined) file.content = content;
     if (!(await canStore(file))) return;
     files.push(file);
     await putRecord('files', file);
     updateStorageUI();
     toast(`${file.name} created`, 'success');
     openFile(file.id);
+  }
+  async function addFiles(list, opts = {}) {
+    const added = [];
+    for (const item of list) {
+      if (!appTypes.includes(item.type)) continue;
+      const file = { ...makeFile(item.type, item.name), content:item.content };
+      if (!(await canStore(file))) break;
+      files.push(file); await putRecord('files', file); added.push(file);
+    }
+    updateNav(); updateStorageUI();
+    if (!opts.quiet && added.length) toast(`${added.length} file${added.length === 1 ? '' : 's'} added`, 'success');
+    return added;
+  }
+  async function deleteFiles(ids) {
+    const gone = new Set(ids);
+    for (const id of gone) await deleteRecord('files', id);
+    files = files.filter(file => !gone.has(file.id));
+    updateNav(); updateStorageUI();
   }
   async function updateFile(patch, broadcast = true) {
     if (!activeFile) return;
@@ -303,8 +469,9 @@
   }
   function getRecentFiles(limit = 5) { return [...files].sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt)).slice(0,limit); }
   function appCard(type, title, desc) {
-    return `<button class="app-card" data-create="${type}"><span class="app-card-kicker">FLORA APP</span><strong>${title}</strong><small>${desc}</small><span class="card-open-label">Open workspace</span></button>`;
+    return `<button class="app-card" data-create="${type}" style="--card-line:${appAccent(type)}"><span class="app-card-kicker">${esc(fileInfo[type]?.short || 'App')}</span><strong>${title}</strong><small>${desc}</small><span class="card-open-label">Create new</span></button>`;
   }
+  function appAccent(type) { return ({ doc:'#dec982', sheet:'#c7a49d', slides:'#a7a7c6', note:'#9fb59a', board:'#b6a4c6', code:'#8da1a0', sketch:'#d69c6c', cards:'#c8a1a0', kanban:'#9aa9bd', journal:'#b3a0c2' })[type] || '#dec982'; }
   function fileIcon(file) { return `<span class="file-type-label">${esc(fileInfo[file.type]?.short || 'File')}</span>`; }
   function fileRow(file) {
     return `<div class="file-row" data-file-row="${file.id}">${fileIcon(file)}<div class="file-row-copy"><strong>${esc(file.name)}</strong><small>${fileInfo[file.type]?.label || 'Flora file'} · Edited ${prettyDate(file.updatedAt)}</small></div><span class="tag">${fileInfo[file.type]?.short || 'File'}</span><div class="file-row-actions"><button data-open="${file.id}" aria-label="Open ${esc(file.name)}">Open</button><button data-export="${file.id}" aria-label="Export ${esc(file.name)}">Export</button></div></div>`;
@@ -312,78 +479,152 @@
   function toolCard(title, description, label, view) {
     return `<button class="tool-card" data-view="${view}"><span class="tool-card-kicker">${label}</span><strong>${title}</strong><small>${description}</small><span class="card-open-label">Open tool</span></button>`;
   }
+  async function fillToday() {
+    const grid = $('#today-grid'); if (!grid) return;
+    const cards = [];
+    if ((settings.pinnedTools || []).includes('tasks')) {
+      const open = (window._floraTasks || []).filter(task => !task.done);
+      cards.push(`<button class="today-card" data-view="tasks"><span class="today-kicker">Tasks</span><strong>${open.length ? `${open.length} to do` : 'All clear'}</strong><small>${open.length ? esc(open[0].text) : 'Nothing waiting on you.'}</small></button>`);
+    }
+    for (const tool of toolRegistry.values()) {
+      if (!tool.today || !(settings.pinnedTools || []).includes(tool.id)) continue;
+      try { const html = await tool.today(); if (html) cards.push(html); } catch {}
+    }
+    if (!$('#today-grid')) return;
+    grid.innerHTML = cards.join('');
+    grid.hidden = !cards.length;
+  }
   function renderHome() {
     setBreadcrumb('Workspace','Home');
     const dayLabel = new Intl.DateTimeFormat(undefined,{weekday:'long'}).format(new Date()).toUpperCase();
     const recent = getRecentFiles(6);
-    const docs = files.filter(f => f.type === 'doc').length;
-    const sheets = files.filter(f => f.type === 'sheet').length;
-    const presentations = files.filter(f => f.type === 'slides').length;
+    const mode = FloraPresets.byId(settings.modeId);
+    const docs = files.filter(f => f.type === 'doc' || f.type === 'note').length;
+    const data = files.filter(f => f.type === 'sheet' || f.type === 'slides').length;
+    const pinned = (settings.pinnedApps || []).filter(type => fileInfo[type]);
+    const shownApps = pinned.length ? pinned : appTypes;
+    const modeBanner = settings.examLock
+      ? `<section class="mode-banner exam"><div><strong>Exam mode is on</strong><small>Notifications are muted and only revision tools are shown.</small></div><button class="btn btn-secondary btn-small" data-action="exit-mode">Leave exam mode</button></section>`
+      : settings.modeId !== 'standard'
+        ? `<section class="mode-banner"><div><strong>${esc(mode.name)}</strong><small>${esc(mode.tag)}. Your sidebar and defaults are set for this mode.</small></div><button class="btn btn-secondary btn-small" data-action="change-mode">Change mode</button></section>` : '';
     $('#view-root').innerHTML = `
       <section class="home-intro">
         <div><div class="page-kicker">${dayLabel} / YOUR WORKSPACE</div><h1 class="page-title">Good to see you, ${esc(profile.name.split(' ')[0])}.</h1><p class="page-subtitle">A focused space for documents, plans, data and ideas.</p></div>
-        <div class="welcome-actions"><button class="btn btn-secondary" data-action="import">Import file</button><button class="btn btn-primary" data-create="doc">Create document</button></div>
+        <div class="welcome-actions"><button class="btn btn-secondary" data-action="palette">Search</button><button class="btn btn-secondary" data-action="import">Import file</button><button class="btn btn-primary" data-create="doc">Create document</button></div>
       </section>
-      <section class="home-hero"><div class="home-hero-copy"><div class="hero-eyebrow">YOUR WORKSPACE, AT YOUR PACE</div><h2>Make space for your next good idea.</h2><p>Everything you create is saved locally in this browser. Start with a blank page or return to a recent project.</p><button class="btn btn-primary" data-view="tools">Explore tools</button></div><div class="hero-side-note"><span>FLORA / LOCAL WORKSPACE</span><strong>${files.length.toString().padStart(2,'0')}</strong><small>saved files</small></div></section>
-      <div class="quick-stats"><div class="stat-card"><div class="stat-label">All files</div><div class="stat-value">${files.length}</div><div class="stat-note">Saved in your local workspace</div></div><div class="stat-card"><div class="stat-label">Documents and notes</div><div class="stat-value">${docs + files.filter(f=>f.type==='note').length}</div><div class="stat-note">Writing and quick capture</div></div><div class="stat-card"><div class="stat-label">Sheets and presentations</div><div class="stat-value">${sheets + presentations}</div><div class="stat-note">Structured work and ideas</div></div></div>
+      ${modeBanner}
+      ${settings.showHomeHero ? `<section class="home-hero"><div class="home-hero-copy"><div class="hero-eyebrow">YOUR WORKSPACE, AT YOUR PACE</div><h2>Make space for your next good idea.</h2><p>Everything you create is saved locally in this browser. Start with a blank page or return to a recent project.</p><button class="btn btn-primary" data-view="${settings.examLock ? 'focus' : 'tools'}">${settings.examLock ? 'Start a focus session' : 'Explore tools'}</button></div><div class="hero-side-note"><span>FLORA / LOCAL WORKSPACE</span><strong data-count="${files.length}">${files.length.toString().padStart(2,'0')}</strong><small>saved files</small></div></section>` : ''}
+      ${settings.showToday ? `<div class="today-grid" id="today-grid" hidden></div>` : ''}
+      ${settings.showHomeStats ? `<div class="quick-stats"><div class="stat-card"><div class="stat-label">All files</div><div class="stat-value">${files.length}</div><div class="stat-note">Saved in your local workspace</div></div><div class="stat-card"><div class="stat-label">Documents and notes</div><div class="stat-value">${docs}</div><div class="stat-note">Writing and quick capture</div></div><div class="stat-card"><div class="stat-label">Sheets and presentations</div><div class="stat-value">${data}</div><div class="stat-note">Structured work and ideas</div></div></div>` : ''}
       <div class="section-heading"><div><h2>Create something</h2><p>Choose a workspace to get started.</p></div></div>
-      <div class="app-grid">${appCard('doc','Azalea Docs','Write, format and export documents')}${appCard('sheet','Amaryllis Sheets','Tables, calculations and data')}${appCard('slides','Iris Presentations','Build clear presentations')}${appCard('note','Anemone Notes','Capture quick thoughts')}${appCard('board','Dahlia Boards','Arrange ideas on a canvas')}</div>
+      <div class="app-grid app-grid-auto">${shownApps.map(type => appCard(type, fileInfo[type].label, fileInfo[type].blurb || '')).join('')}</div>
       <div class="section-heading"><div><h2>Recent files</h2><p>Continue where you left off.</p></div><button class="text-link" data-view="files">View all files</button></div>
       <div class="recent-list">${recent.length ? recent.map(fileRow).join('') : `<div class="empty-state"><h3>Your workspace is ready</h3><p>Create a document, spreadsheet, presentation or note. Your work is saved on this device.</p></div>`}</div>`;
+    fillToday();
   }
   function renderAppLanding(type) {
     const info = fileInfo[type];
     const matching = getRecentFiles(50).filter(file => file.type === type);
     setBreadcrumb('Create', info.label);
-    const description = type==='doc'?'A page-focused writing workspace with familiar formatting controls.':type==='sheet'?'Organise information, calculate totals and inspect your data.':type==='slides'?'Turn an outline into a clear presentation.':type==='note'?'Keep short notes and working thoughts close at hand.':'Arrange ideas, references and plans on a freeform board.';
+    const description = info.landing || '';
     $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">FLORA APPLICATION</div><h1 class="page-title">${info.label}</h1><p class="page-subtitle">${description}</p></div><button class="btn btn-primary" data-create="${type}">Create ${info.short.toLowerCase()}</button></div>
     <div class="panel"><div class="section-heading" style="margin-top:0"><div><h2>Your ${info.short.toLowerCase()}s</h2><p>Saved locally on this device.</p></div></div>${matching.length ? `<div class="recent-list">${matching.map(fileRow).join('')}</div>` : `<div class="empty-state"><h3>No ${info.short.toLowerCase()}s yet</h3><p>Create your first one to get started.</p><button class="btn btn-primary" data-create="${type}" style="margin-top:15px">Create ${info.short}</button></div>`}</div>`;
   }
+  let fileTypeFilter = 'all';
+  function sortedFiles(query = '', type = 'all') {
+    const q = query.toLowerCase();
+    const list = files.filter(f => (f.name.toLowerCase().includes(q) || (fileInfo[f.type]?.label || '').toLowerCase().includes(q)) && (type === 'all' || f.type === type));
+    const sorters = {
+      recent:(a,b) => new Date(b.updatedAt) - new Date(a.updatedAt),
+      name:(a,b) => a.name.localeCompare(b.name),
+      size:(a,b) => fileSize(b) - fileSize(a),
+      type:(a,b) => (fileInfo[a.type]?.short || '').localeCompare(fileInfo[b.type]?.short || '') || a.name.localeCompare(b.name)
+    };
+    return list.sort(sorters[settings.sortFiles] || sorters.recent);
+  }
+  function fileGridHTML(query = '', type = 'all') {
+    const visible = sortedFiles(query, type);
+    if (!visible.length) return `<div class="panel"><div class="empty-state"><h3>${query || type !== 'all' ? 'No matching files' : 'Your library is ready'}</h3><p>${query || type !== 'all' ? 'Try a different search or filter.' : 'Create your first file or import an existing one.'}</p></div></div>`;
+    return `<div class="file-grid">${visible.map(file => `<div class="file-card"><div class="file-card-head">${fileIcon(file)}<button class="btn btn-ghost btn-small" data-menu-file="${file.id}" title="File options">Options</button></div><div class="file-card-title" title="${esc(file.name)}">${esc(file.name)}</div><div class="file-card-meta">${fileInfo[file.type]?.short || 'File'} · ${prettyDate(file.updatedAt)} · ${formatBytes(fileSize(file))}</div><div class="file-card-actions"><button class="btn btn-secondary btn-small" data-open="${file.id}">Open</button><button class="btn btn-ghost btn-small" data-export="${file.id}">Export</button></div></div>`).join('')}</div>`;
+  }
+  function refreshFileList() {
+    const region = $('#file-list-region'); if (!region) return;
+    region.innerHTML = fileGridHTML($('#file-search')?.value || '', fileTypeFilter);
+  }
   function renderFiles(filter = '') {
     setBreadcrumb('Workspace','My files');
-    const query = filter.toLowerCase();
-    const visible = [...files].sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt)).filter(f => f.name.toLowerCase().includes(query) || fileInfo[f.type].label.toLowerCase().includes(query));
     $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">YOUR LOCAL LIBRARY</div><h1 class="page-title">My files</h1><p class="page-subtitle">Everything you make in Flora, kept together and under your control.</p></div><div class="welcome-actions"><button class="btn btn-secondary" data-action="import">Import file</button><button class="btn btn-primary" data-action="new-file">New file</button></div></div>
-      <div class="toolbar-row"><div class="search-field"><input id="file-search" type="search" placeholder="Search your files…" value="${esc(filter)}" aria-label="Search files"></div><div style="display:flex;gap:7px"><select id="file-filter" class="select-control" aria-label="Filter by type"><option value="all">All types</option>${appTypes.map(type=>`<option value="${type}">${fileInfo[type].short}s</option>`).join('')}</select><button class="btn btn-secondary btn-small" data-action="import">Import file</button></div></div>
-      <div id="file-list-region">${visible.length ? `<div class="file-grid">${visible.map(file=>`<div class="file-card"><div class="file-card-head">${fileIcon(file)}<button class="btn btn-ghost btn-small" data-menu-file="${file.id}" title="File options">Options</button></div><div class="file-card-title" title="${esc(file.name)}">${esc(file.name)}</div><div class="file-card-meta">${fileInfo[file.type].short} · ${prettyDate(file.updatedAt)}</div><div class="file-card-actions"><button class="btn btn-secondary btn-small" data-open="${file.id}">Open</button><button class="btn btn-ghost btn-small" data-export="${file.id}">Export</button></div></div>`).join('')}</div>` : `<div class="panel"><div class="empty-state"><h3>${filter ? 'No matching files' : 'Your library is ready'}</h3><p>${filter ? 'Try a different search.' : 'Create your first file or import an existing one.'}</p></div></div>`}</div>`;
+      <div class="toolbar-row"><div class="search-field"><input id="file-search" type="search" placeholder="Search your files…" value="${esc(filter)}" aria-label="Search files"></div><div style="display:flex;gap:7px;flex-wrap:wrap"><select id="file-filter" class="select-control" aria-label="Filter by type"><option value="all">All types</option>${appTypes.map(type => `<option value="${type}" ${fileTypeFilter === type ? 'selected' : ''}>${fileInfo[type].short}s</option>`).join('')}</select><select id="file-sort" class="select-control" aria-label="Sort files">${[['recent','Recently edited'],['name','Name'],['size','Size'],['type','Type']].map(([v,l]) => `<option value="${v}" ${settings.sortFiles === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
+      <div id="file-list-region">${fileGridHTML(filter, fileTypeFilter)}</div>`;
   }
   function renderShared() {
     const shared = files.filter(file => (file.collaborators || []).includes(profile.id) || file.ownerId !== profile.id);
     setBreadcrumb('Workspace','Shared with me');
     $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">COLLABORATION</div><h1 class="page-title">Shared with me</h1><p class="page-subtitle">Files shared through your local Flora workspace.</p></div></div><div class="panel"><div class="collab-explainer"><strong>Local collaboration:</strong> Flora can sync open files and show collaborator cursors between tabs or windows using the same browser profile and local address. It does not connect people across the internet or different devices without a separate server.</div>${shared.length ? `<div class="recent-list">${shared.map(fileRow).join('')}</div>` : `<div class="empty-state"><h3>No shared files yet</h3><p>Open a file, choose Collaborate, then open the same local Flora address in another tab and select a different local profile.</p></div>`}</div>`;
   }
-  function renderStorage() {
-    setBreadcrumb('Tools','Flora Storage');
-    const usage = localDataSize();
-    const limit = settings.storageLimitBytes;
-    const estimatePromise = storageEstimate();
-    $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">LOCAL STORAGE</div><h1 class="page-title">Flora Storage</h1><p class="page-subtitle">A clear view of the space Flora uses on this browser.</p></div><button class="btn btn-secondary" data-view="settings">Manage limit</button></div>
-      <div class="storage-panel"><div class="storage-big"><span class="stat-label">Flora virtual storage</span><strong>${formatBytes(usage)}</strong><small>Estimated size of Flora profiles, settings and saved files.</small></div><div class="storage-big"><span class="stat-label">Your chosen limit</span><strong>${formatBytes(limit)}</strong><small>The limit you set inside Flora.</small></div></div>
-      <div class="panel" style="margin-top:15px"><h3>Storage breakdown</h3><p class="panel-subtitle">Local estimate; individual file sizes are approximate.</p><div class="progress-track storage-detail-track" style="height:10px;margin:15px 0"><span style="width:${Math.min(100,usage/limit*100)}%"></span></div><div class="setting-row"><div class="setting-copy"><strong>Documents, sheets, slides and notes</strong><small>${formatBytes(files.reduce((sum,file)=>sum+new Blob([JSON.stringify(file)]).size,0))} across ${files.length} files</small></div><span class="tag">${files.length} files</span></div><div class="setting-row"><div class="setting-copy"><strong>Local profiles</strong><small>${profiles.length} profile${profiles.length===1?'':'s'} on this browser</small></div></div><div class="setting-row"><div class="setting-copy"><strong>Browser storage availability</strong><small id="browser-quota-label">Checking browser quota…</small></div><span class="tag">Browser managed</span></div><p class="small-print">Your chosen Flora limit is a logical cap for the app. The browser or operating system may impose a smaller quota, and may clear site data in some circumstances. Export important work regularly.</p></div>`;
-    estimatePromise.then(result=>{ const label=$('#browser-quota-label'); if(label) label.textContent=result.quota?`${formatBytes(result.usage)} used of approximately ${formatBytes(result.quota)} available to this site`:'The browser does not expose a storage estimate.'; });
-  }
   function renderTasks() {
     setBreadcrumb('Tools','Rowan Tasks');
     const tasks = window._floraTasks || [];
     $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">GENTLE PLANNING</div><h1 class="page-title">Rowan Tasks</h1><p class="page-subtitle">A simple local checklist for the things on your mind.</p></div></div><div class="panel" style="max-width:760px"><form id="task-form" class="task-input-row"><input id="task-input" class="text-input" placeholder="Add a task…" aria-label="New task" style="flex:1"><button class="btn btn-primary" type="submit">Add task</button></form><div class="task-list">${tasks.length?tasks.map((task,i)=>`<label class="task-item ${task.done?'done':''}"><input type="checkbox" data-task-toggle="${i}" ${task.done?'checked':''}><span>${esc(task.text)}</span><button type="button" class="btn btn-ghost btn-small" data-task-delete="${i}" aria-label="Delete task">Remove</button></label>`).join(''):`<div class="empty-state"><h3>A fresh list</h3><p>Add one small next step. You can tick it off when it is done.</p></div>`}</div></div>`;
   }
+  function focusLength(mode = focusMode) { return Math.max(1, Number(mode === 'focus' ? settings.focusMinutes : settings.breakMinutes) || (mode === 'focus' ? 25 : 5)) * 60; }
+  const RING = 2 * Math.PI * 54;
+  function paintFocus() {
+    const mins = Math.floor(focusSeconds / 60).toString().padStart(2, '0'), secs = (focusSeconds % 60).toString().padStart(2, '0');
+    const out = $('#focus-time'); if (out) out.textContent = `${mins}:${secs}`;
+    const bar = $('#focus-ring-bar'); if (bar) bar.style.strokeDashoffset = String(RING * (1 - focusSeconds / focusLength()));
+    document.title = focusRunning ? `${mins}:${secs} · ${focusMode === 'focus' ? 'Focus' : 'Break'}` : 'Flora — your creative workspace';
+  }
+  function chime() {
+    if (!settings.soundOn || settings.quietToasts) return;
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      [660, 880, 1046].forEach((freq, i) => {
+        const osc = ctx.createOscillator(), gain = ctx.createGain(), t = ctx.currentTime + i * .22;
+        osc.type = 'sine'; osc.frequency.value = freq; gain.gain.setValueAtTime(0, t); gain.gain.linearRampToValueAtTime(.16, t + .03); gain.gain.exponentialRampToValueAtTime(.0001, t + .9);
+        osc.connect(gain).connect(ctx.destination); osc.start(t); osc.stop(t + 1);
+      });
+      setTimeout(() => ctx.close(), 1800);
+    } catch {}
+  }
+  function toggleFocus() {
+    if (focusRunning) { focusRunning = false; clearInterval(focusTimer); }
+    else {
+      if (focusSeconds <= 0) focusSeconds = focusLength();
+      focusRunning = true;
+      focusTimer = setInterval(() => {
+        focusSeconds = Math.max(0, focusSeconds - 1); paintFocus();
+        if (focusSeconds === 0) {
+          focusRunning = false; clearInterval(focusTimer); chime();
+          toast(focusMode === 'focus' ? 'Focus session complete. Take a proper break.' : 'Break over. Ready when you are.', 'success');
+          renderFocus();
+        }
+      }, 1000);
+    }
+    renderFocus();
+  }
+  function resetFocus(mode) {
+    if (mode) focusMode = mode;
+    focusRunning = false; clearInterval(focusTimer); focusSeconds = focusLength(); renderFocus();
+  }
   function renderFocus() {
     setBreadcrumb('Tools','Camellia Focus');
-    const mins = Math.floor(focusSeconds/60).toString().padStart(2,'0');
-    const secs = (focusSeconds%60).toString().padStart(2,'0');
-    $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">A MOMENT FOR YOURSELF</div><h1 class="page-title">Camellia Focus</h1><p class="page-subtitle">A calm timer for a little focused work or a proper break.</p></div></div><div class="focus-card"><div class="focus-label">${focusMode==='focus'?'FOCUS SESSION':'REST BREAK'}</div><div class="focus-time" id="focus-time">${mins}:${secs}</div><p class="page-subtitle">${focusRunning?'One thing at a time. You have got this.':'Choose a session and begin when you are ready.'}</p><div class="focus-controls"><button class="btn btn-secondary" data-focus-mode="focus">25 min focus</button><button class="btn btn-secondary" data-focus-mode="break">5 min break</button></div><div class="focus-controls"><button class="btn btn-primary" data-focus-toggle>${focusRunning?'Pause':'Start'} session</button><button class="btn btn-ghost" data-focus-reset>Reset</button></div></div>`;
+    $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">A MOMENT FOR YOURSELF</div><h1 class="page-title">Camellia Focus</h1><p class="page-subtitle">A calm timer for focused work or a proper break. Lengths follow your mode and can be changed in Settings.</p></div></div><div class="focus-card"><div class="focus-label">${focusMode==='focus'?'FOCUS SESSION':'REST BREAK'}</div><div class="focus-ring-wrap"><svg class="focus-ring" viewBox="0 0 120 120" aria-hidden="true"><circle class="focus-ring-track" cx="60" cy="60" r="54"/><circle class="focus-ring-bar" id="focus-ring-bar" cx="60" cy="60" r="54" style="stroke-dasharray:${RING.toFixed(2)};stroke-dashoffset:${(RING * (1 - focusSeconds / focusLength())).toFixed(2)}"/></svg><div class="focus-time" id="focus-time">00:00</div></div><p class="page-subtitle">${focusRunning?'One thing at a time. You have got this.':'Choose a session and begin when you are ready.'}</p><div class="focus-controls"><button class="btn btn-secondary ${focusMode==='focus'?'is-on':''}" data-focus-mode="focus">${settings.focusMinutes} min focus</button><button class="btn btn-secondary ${focusMode==='break'?'is-on':''}" data-focus-mode="break">${settings.breakMinutes} min break</button></div><div class="focus-controls"><button class="btn btn-primary" data-focus-toggle>${focusRunning?'Pause':'Start'} session</button><button class="btn btn-ghost" data-focus-reset>Reset</button></div></div>`;
+    paintFocus();
   }
 
+  function toolTile(tool) {
+    const pinned = (settings.pinnedTools || []).includes(tool.id);
+    return `<article class="tool-tile" data-tool-name="${esc((tool.title + ' ' + tool.desc + ' ' + tool.cat).toLowerCase())}"><button class="tool-tile-main" data-view="${tool.id}"><span class="tool-tile-kicker">${esc(tool.label)}</span><strong>${esc(tool.title)}</strong><small>${esc(tool.desc)}</small></button><button class="pin-toggle ${pinned ? 'on' : ''}" data-pin-tool="${tool.id}" aria-pressed="${pinned}" title="${pinned ? 'Remove from sidebar' : 'Pin to sidebar'}">${pinned ? 'Pinned' : 'Pin'}</button></article>`;
+  }
   function renderTools() {
     setBreadcrumb('Workspace','Tools');
-    $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">FLORA UTILITIES</div><h1 class="page-title">Tools</h1><p class="page-subtitle">Small utilities that make the creative work easier to manage.</p></div></div>
-      <div class="tool-grid">
-        ${toolCard('Amethyst','Send Flora files directly to another person on your local network.','PEER-TO-PEER TRANSFER','amethyst')}
-        ${toolCard('Rowan Tasks','Keep a lightweight checklist alongside your projects.','PLANNING','tasks')}
-        ${toolCard('Camellia Focus','Use a configurable focus and break timer.','FOCUS','focus')}
-        ${toolCard('Flora Storage','Review local usage and manage your storage cap.','STORAGE','storage')}
-      </div>
-      <div class="tool-note"><strong>Local-first by design</strong><p>Flora keeps files in this browser. Amethyst uses a direct browser-to-browser connection; it does not upload files to a cloud storage provider.</p></div>`;
+    const tools = allTools();
+    const cats = ['Study','Plan','Focus','Utilities','Share','Files'].filter(cat => tools.some(t => t.cat === cat)).concat([...new Set(tools.map(t => t.cat))].filter(cat => !['Study','Plan','Focus','Utilities','Share','Files'].includes(cat)));
+    $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">FLORA UTILITIES</div><h1 class="page-title">Tools</h1><p class="page-subtitle">Small utilities that make the creative work easier to manage. Pin the ones you use to your sidebar.</p></div><div class="search-field"><input id="tool-search" type="search" placeholder="Search tools…" aria-label="Search tools"></div></div>
+      ${cats.map(cat => `<section class="tool-group"><div class="section-heading"><div><h2>${cat}</h2></div></div><div class="tool-grid tool-grid-auto">${tools.filter(t => t.cat === cat).map(toolTile).join('')}</div></section>`).join('')}
+      <div class="tool-empty" id="tool-empty" hidden>No tools match that search.</div>
+      <div class="tool-note"><strong>Local-first by design</strong><p>Flora keeps files and tool data in this browser. Amethyst uses a direct browser-to-browser connection; it does not upload files to a cloud storage provider.</p></div>`;
   }
 
   function renderAmethyst() {
@@ -536,42 +777,6 @@
     catch{field.focus();field.select();toast('Select and copy the connection code.');}
   }
 
-  function renderSettings() {
-    setBreadcrumb('Workspace','Settings');
-    const tabs = [ ['general','General'],['accessibility','Accessibility'],['customization','Customization'],['privacy','Privacy'] ];
-    const tabMarkup = tabs.map(([id,label])=>`<button class="settings-tab ${settingsTab===id?'active':''}" data-settings-tab="${id}">${label}</button>`).join('');
-    let content = '';
-    if (settingsTab === 'general') content = `
-      <h2>General</h2><p>Set how Flora behaves and how much space it can use.</p>
-      ${settingToggle('autosave','Automatic saving','Save your work as you type. You can also use Ctrl + S (Command + S on Mac).',settings.autosave)}
-      ${settingToggle('confirmDelete','Confirm before deleting','Ask before removing a file from this device.',settings.confirmDelete)}
-      ${settingToggle('compactMode','Compact sidebar','Use a narrower navigation rail to give editors more room.',settings.compactMode)}
-      <div class="setting-row"><div class="setting-copy"><strong>Virtual storage limit</strong><small>Choose a cap for Flora’s local files. Options are constrained by the browser quota estimate.</small></div><div style="display:flex;gap:7px;align-items:center"><select class="select-control" id="storage-unit"><option value="KB" ${settings.storageUnit==='KB'?'selected':''}>KB</option><option value="MB" ${settings.storageUnit==='MB'?'selected':''}>MB</option><option value="GB" ${settings.storageUnit==='GB'?'selected':''}>GB</option></select><select class="select-control" id="storage-amount" aria-label="Storage amount"></select></div></div>
-      <div class="setting-row"><div class="setting-copy"><strong>Keyboard shortcuts</strong><small><span class="kbd">Ctrl</span> + <span class="kbd">S</span> Save · <span class="kbd">Ctrl</span> + <span class="kbd">N</span> Create document · <span class="kbd">Esc</span> Close dialog</small></div></div>`;
-    if (settingsTab === 'accessibility') content = `
-      <h2>Accessibility</h2><p>Adjust Flora to make your workspace more comfortable.</p>
-      ${settingToggle('largeText','Larger text','Increase the overall interface text size.',settings.largeText)}
-      ${settingToggle('highContrast','Higher contrast','Strengthen text and border contrast.',settings.highContrast)}
-      ${settingToggle('reduceMotion','Reduce motion','Disable most transitions and decorative movement.',settings.reduceMotion)}
-      ${settingToggle('spellcheck','Browser spellcheck','Allow your browser’s built-in spellcheck in writing areas.',settings.spellcheck)}`;
-    if (settingsTab === 'customization') content = `
-      <h2>Customization</h2><p>Give your Flora workspace a colour that feels like yours.</p>
-      <div class="setting-row"><div class="setting-copy"><strong>Accent colour</strong><small>Used for buttons, focus states and small highlights.</small></div><div class="swatches">${['#e9c96b','#c8a1a0','#9eafa0','#9aa9bd','#b3a0c2','#d69c6c','#8f9b6a'].map(color=>`<button class="swatch ${settings.accent===color?'active':''}" style="background:${color}" data-accent="${color}" aria-label="Set accent ${color}"></button>`).join('')}</div></div>
-      <div class="setting-row"><div class="setting-copy"><strong>Profile details</strong><small>Names, pronouns, bios and cursor colours are managed separately in your profile settings.</small></div><button class="btn btn-secondary btn-small" data-action="edit-profile">Open profile settings</button></div>
-      <div class="setting-row"><div class="setting-copy"><strong>Default typeface</strong><small>Newsreader is used when available, with a Georgia fallback. The app does not download fonts, so the workspace remains offline-first.</small></div><span class="tag">Newsreader</span></div>
-      <div class="setting-row"><div class="setting-copy"><strong>Workspace appearance</strong><small>Flora uses a warm, light pastel palette designed for long sessions.</small></div><span class="tag">Warm light</span></div>`;
-    if (settingsTab === 'privacy') content = `
-      <h2>Privacy</h2><p>Your workspace is designed to stay on this device.</p>
-      <div class="setting-row"><div class="setting-copy"><strong>Local-first storage</strong><small>Profiles, settings and work files are saved in this browser’s IndexedDB. No Flora account or analytics service is used.</small></div><span class="tag">On device</span></div>
-      <div class="setting-row"><div class="setting-copy"><strong>Collaboration scope</strong><small>Live sync uses BroadcastChannel between tabs/windows on the same browser origin. It does not send your files to a server.</small></div><span class="tag">Local only</span></div>
-      <div class="setting-row"><div class="setting-copy"><strong>Export your work</strong><small>You can export files at any time from My files or an editor.</small></div><button class="btn btn-secondary btn-small" data-view="files">Open files</button></div>
-      <div class="setting-row"><div class="setting-copy"><strong>Clear Flora data</strong><small>Remove every local profile, file, task and preference from this browser. This cannot be undone.</small></div><button class="btn btn-danger btn-small" data-action="clear-data">Clear all data</button></div>`;
-    $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">MAKE FLORA YOURS</div><h1 class="page-title">Settings</h1><p class="page-subtitle">A few thoughtful controls for your workspace.</p></div></div><div class="settings-layout"><div class="settings-tabs">${tabMarkup}</div><section class="settings-content">${content}</section></div>`;
-    if (settingsTab === 'general') populateStorageAmount();
-  }
-  function settingToggle(key, title, description, value) {
-    return `<div class="setting-row"><div class="setting-copy"><strong>${title}</strong><small>${description}</small></div><button class="toggle" role="switch" aria-checked="${!!value}" data-setting-toggle="${key}" aria-label="${title}"></button></div>`;
-  }
   async function storageQuotaBytes() {
     const estimate = await storageEstimate();
     // Browser quota varies. Keep a small safety buffer when presenting options.
@@ -584,20 +789,6 @@
     const options = [];
     for (let amount=16; amount<=maxAmount && options.length<64; amount*=2) options.push(amount);
     return options;
-  }
-  async function populateStorageAmount() {
-    const unitSelect = $('#storage-unit');
-    const amountSelect = $('#storage-amount');
-    if (!unitSelect || !amountSelect) return;
-    const unit = unitSelect.value;
-    const choices = await storageChoices(unit);
-    const unitOption = unitSelect.querySelector(`option[value="${unit}"]`);
-    if (!choices.length) { if(unitOption)unitOption.disabled=true; amountSelect.innerHTML = `<option value="">Unavailable — browser quota below 16 ${unit}</option>`; amountSelect.disabled = true; return; }
-    if(unitOption)unitOption.disabled=false;
-    amountSelect.disabled = false;
-    amountSelect.innerHTML = choices.map(amount=>`<option value="${amount}">${amount} ${unit}</option>`).join('');
-    const closest = choices.reduce((a,b)=>Math.abs(b-settings.storageAmount)<Math.abs(a-settings.storageAmount)?b:a,choices[0]);
-    amountSelect.value = String(choices.includes(settings.storageAmount)?settings.storageAmount:closest);
   }
 
   function sanitizeHTML(html) {
@@ -641,9 +832,11 @@
     if (file.type==='sheet') renderSheetGrid();
     if (file.type==='slides') renderSlide();
     if (file.type==='board') renderBoard();
+    appRegistry.get(file.type)?.mount?.(file, $('.app-workspace'));
     updateCollabBar();
   }
   function renderEditorBody(file) {
+    if (appRegistry.has(file.type)) return appRegistry.get(file.type).renderBody(file);
     if (file.type==='doc') return `<div class="docs-editor-shell">
       <div class="docs-menu-row"><span class="docs-menu-label">File</span><span class="docs-menu-label">Edit</span><span class="docs-menu-label">View</span><span class="docs-menu-label">Insert</span><span class="docs-menu-label">Format</span><span class="docs-menu-label">Tools</span></div>
       <div class="editor-toolbar docs-toolbar">
@@ -672,6 +865,7 @@
     if (activeFile.type==='sheet') { await updateFile({content:activeFile.content}); }
     if (activeFile.type==='slides') { await updateFile({content:activeFile.content}); }
     if (activeFile.type==='board') { await updateFile({content:activeFile.content}); }
+    if (appRegistry.has(activeFile.type)) { const def = appRegistry.get(activeFile.type); await updateFile({ content: def.collect ? def.collect(activeFile) : activeFile.content }); }
     saveStatus('Saved on this device');
     broadcastPresence(action);
   }
@@ -680,7 +874,7 @@
     saveStatus(settings.autosave ? 'Saving…' : 'Unsaved changes');
     broadcastPresence(action);
     clearTimeout(saveTimer);
-    if (settings.autosave) saveTimer=setTimeout(()=>saveCurrentContent(action),450);
+    if (settings.autosave) saveTimer=setTimeout(()=>saveCurrentContent(action),Number(settings.autosaveDelay)||450);
   }
 
   // Spreadsheet helpers. Values and formula results are held in activeFile.content.cells.
@@ -868,6 +1062,38 @@
     const anchor=document.createElement('a');anchor.href=url;anchor.download=filename;document.body.append(anchor);anchor.click();anchor.remove();
     setTimeout(()=>URL.revokeObjectURL(url),1500);
   }
+  function dataURLToBlob(dataURL) {
+    const [head, body] = String(dataURL).split(',');
+    const mime = (head.match(/data:([^;]+)/) || [])[1] || 'application/octet-stream';
+    const bin = atob(body || ''); const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type:mime });
+  }
+  /* Every text export passes through here so the chosen encoding, line endings and fallback rules apply. */
+  function textBlob(data, mime, extension, force = {}) {
+    let encId = force.encoding || settings.exportEncoding || 'utf-8';
+    const isHtml = /html/.test(mime) || extension === 'doc' || extension === 'html';
+    const isJson = /json/.test(mime) || extension === 'json';
+    if (extension === 'csv' && settings.csvBom && encId === 'utf-8' && !force.encoding) encId = 'utf-8-bom';
+    let text = String(data);
+    if (isHtml) text = FloraEncoding.applyMetaCharset(text, encId);
+    const result = FloraEncoding.encode(text, encId, { unsupported:settings.asciiFallback, context:isHtml ? 'html' : isJson ? 'json' : 'text', lineEndings:force.lineEndings || settings.lineEndings });
+    if (result.count && !force.silent) {
+      const how = { replace:'replaced with “?”', transliterate:'simplified to plain letters', escape:'written as escape codes' }[settings.asciiFallback] || 'changed';
+      toast(`${result.count} character${result.count === 1 ? '' : 's'} can’t be stored as ${FloraEncoding.info(encId).short} and ${result.count === 1 ? 'was' : 'were'} ${how}.`);
+    }
+    return new Blob([result.bytes], { type:mime.replace(/;\s*charset=[^;]+/i, '') + '; charset=' + result.charset });
+  }
+  async function readFileText(file) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const choice = settings.importEncoding || 'auto';
+    let id = choice, reason = 'Chosen in Settings';
+    if (choice === 'auto') { const found = FloraEncoding.detect(bytes); id = found.id; reason = found.reason; }
+    const decoded = FloraEncoding.decode(bytes, id);
+    return { text:decoded.text, encoding:id, invalid:decoded.invalid, reason, size:bytes.length };
+  }
+  const codeExtensions = { js:'javascript', mjs:'javascript', ts:'typescript', py:'python', css:'css', sql:'sql', c:'c', cpp:'cpp', java:'java', rs:'rust', go:'go', sh:'shell', xml:'xml', yml:'yaml', yaml:'yaml' };
+  function importExtensions() { return ['txt','md','html','htm','csv','json', ...(appTypes.includes('code') ? Object.keys(codeExtensions) : [])]; }
   function safeFilename(name) { return name.replace(/[\\/:*?"<>|]+/g,'-').trim() || 'flora-file'; }
   function toCSV(content) {
     const rows=content.rows||20,cols=content.cols||12;
@@ -890,6 +1116,13 @@
     if (extension==='pptx' && file.type==='slides') {
       return {blob:FloraExportFormats.pptx(file),filename:`${safeFilename(file.name)}.pptx`};
     }
+    const appDef = appRegistry.get(file.type);
+    if (appDef?.exportFile) {
+      const result = appDef.exportFile(file, extension, { esc, cellName, safeFilename, dataURLToBlob });
+      const filename = `${safeFilename(file.name)}.${extension}`;
+      if (result.blob) return { blob:result.blob, filename };
+      return { blob:textBlob(result.text, result.mime || 'text/plain;charset=utf-8', extension), filename };
+    }
     let mime='text/plain;charset=utf-8',data='';
     if(file.type==='doc'){
       const html=sanitizeHTML(file.content);
@@ -910,7 +1143,7 @@
       if(extension==='html'){mime='text/html;charset=utf-8';data=`<!doctype html><meta charset="utf-8"><title>${esc(file.name)}</title><style>body{background:#faf7ec;font-family:Georgia;padding:25px}.note{display:inline-block;vertical-align:top;width:180px;min-height:120px;padding:15px;margin:10px;background:#f8edc6;white-space:pre-wrap}</style>${(file.content||[]).map(note=>`<div class="note">${esc(note.text)}</div>`).join('')}`;}
       else {mime='application/json';data=JSON.stringify(file.content,null,2);}
     }
-    return {blob:new Blob([data],{type:mime}),filename:`${safeFilename(file.name)}.${extension}`};
+    return {blob:textBlob(data,mime,extension),filename:`${safeFilename(file.name)}.${extension}`};
   }
   function exportFile(file, extension) {
     const {blob,filename}=exportPayload(file,extension);
@@ -918,20 +1151,20 @@
     toast(`Exported ${filename}`, 'success');
   }
   function showExportModal(file) {
-    const types=fileInfo[file.type].extensions;
+    const types=(appRegistry.get(file.type)?.extensionsFor?.(file))||fileInfo[file.type].extensions;
     showModal(`<h2>Export ${esc(file.name)}</h2><p>Choose a format. Flora creates the file directly in your browser.</p><div class="choice-row">${types.map((ext,i)=>`<button class="choice-chip ${i===0?'active':''}" data-export-format="${ext}">.${ext.toUpperCase()}</button>`).join('')}</div><p class="small-print" style="margin-top:14px">Office files are generated locally as basic Open XML packages. Documents keep headings and inline emphasis; spreadsheets keep cell values and basic formulas; presentations export title-and-body slides.</p><div class="form-foot"><button class="btn btn-ghost" data-modal-close>Cancel</button><button class="btn btn-primary" id="confirm-export">Export file</button></div>`, 'Export file');
     let selected=types[0];
     $$('[data-export-format]').forEach(button=>button.addEventListener('click',()=>{$$('[data-export-format]').forEach(b=>b.classList.remove('active'));button.classList.add('active');selected=button.dataset.exportFormat;}));
     $('#confirm-export').addEventListener('click',()=>{exportFile(file,selected);closeModal();});
   }
   function showImportModal() {
-    showModal(`<h2>Bring a file into Flora</h2><p>Import a text, HTML, CSV or JSON file. The imported copy is stored locally in your Flora library.</p><div class="import-drop"><strong>Choose a file from your device</strong><br><input type="file" id="import-file" accept=".txt,.md,.html,.htm,.csv,.json,text/plain,text/html,text/csv,application/json"></div><div class="form-foot"><span class="form-hint">The original file is not changed.</span><button class="btn btn-ghost" data-modal-close>Close</button></div>`, 'Import file');
+    showModal(`<h2>Bring a file into Flora</h2><p>Import a text, HTML, CSV, JSON or code file. Flora detects its text encoding (or uses the one chosen in Settings) and stores a local copy.</p><div class="import-drop"><strong>Choose a file from your device</strong><br><input type="file" id="import-file" accept="${importExtensions().map(e => '.' + e).join(',')},text/plain,text/html,text/csv,application/json"></div><div class="form-foot"><span class="form-hint">The original file is not changed.</span><button class="btn btn-ghost" data-modal-close>Close</button></div>`, 'Import file');
     $('#import-file').addEventListener('change',async event=>{
       const file=event.target.files?.[0];if(!file)return;
       const extension=file.name.split('.').pop().toLowerCase();
-      if(!['txt','md','html','htm','csv','json'].includes(extension)){toast('That file type is not supported yet.', 'error');return;}
+      if(!importExtensions().includes(extension)){toast('That file type is not supported yet.', 'error');return;}
       try{
-        const text=await file.text();let type='doc',content=text;
+        const readInfo=await readFileText(file);const text=readInfo.text;let type='doc',content=text;
         if(extension==='csv'){
           type='sheet';const lines=text.replace(/\r/g,'').split('\n').filter(Boolean);const cells={};let maxCols=1;
           lines.slice(0,1000).forEach((line,r)=>{const cols=parseCSVLine(line);maxCols=Math.max(maxCols,cols.length);cols.forEach((value,c)=>{cells[cellName(r+1,c+1)]=value;});});
@@ -944,10 +1177,11 @@
           else {type='doc';content=`<pre>${esc(JSON.stringify(parsed,null,2))}</pre>`;}
         } else if(extension==='html'||extension==='htm') {type='doc';content=sanitizeHTML(text);}
         else if(extension==='md') {type='doc';content=`<pre>${esc(text)}</pre>`;}
+        else if(codeExtensions[extension]&&appTypes.includes('code')) {type='code';content={lang:codeExtensions[extension],text,wrap:false,tab:2};}
         else {type='doc';content=`<p>${esc(text).replace(/\n/g,'<br>')}</p>`;}
         const name=file.name.replace(/\.[^.]+$/,'');const imported={...makeFile(type,name),content};
         if(!(await canStore(imported)))return;
-        files.push(imported);await putRecord('files',imported);closeModal();toast('File imported into Flora', 'success');updateNav();openFile(imported.id);
+        files.push(imported);await putRecord('files',imported);closeModal();toast(`Imported “${imported.name}” (read as ${FloraEncoding.info(readInfo.encoding).short})${readInfo.invalid?` · ${readInfo.invalid} unreadable character${readInfo.invalid===1?'':'s'}`:''}`, 'success');updateNav();openFile(imported.id);
       }catch(error){toast(`Could not import that file: ${error.message}`, 'error');}
     });
   }
@@ -964,50 +1198,143 @@
     $$('[data-modal-close]').forEach(button=>button.addEventListener('click',closeModal));
   }
   function closeModal() { $('#modal-root').innerHTML=''; }
-  function storageSetupOptions(unit) {
-    const multiplier=unit==='GB'?1024**3:unit==='MB'?1024**2:1024;
-    const options=[];for(let value=16;value<=8192;value*=2)options.push(value);
-    return options.map(value=>`<option value="${value}">${value} ${unit}</option>`).join('');
+  function showSetupModal(isNewProfile = false, opts = {}) {
+    if (Core.setup) Core.setup.open({ newProfile:isNewProfile, ...opts });
+    else toast('The setup screen could not be loaded.', 'error');
   }
-  function showSetupModal(isNewProfile=false) {
-    const state={name:'',bio:'',color:'#b89a50',accent:settings.accent||'#e9c96b',compact:!!settings.compactMode,reduceMotion:!!settings.reduceMotion,unit:settings.storageUnit||'MB',amount:settings.storageAmount||64};
-    let step=1;
-    const total=isNewProfile?2:4;
-    const bytesFor=(unit,amount)=>amount*(unit==='GB'?1024**3:unit==='MB'?1024**2:1024);
-    const render=async()=>{
-      let body='';
-      if(step===1)body=`<div class="setup-step-copy"><div class="page-kicker">STEP 1 OF ${total}</div><h2>${isNewProfile?'Create a profile':'Start with your profile'}</h2><p>This name and colour identify you in your local Flora workspace and in collaborator presence.</p></div><div class="form-grid"><div class="form-field full"><label for="setup-name">Display name</label><input id="setup-name" required maxlength="60" placeholder="e.g. Alex Morgan" value="${esc(state.name)}" autocomplete="name"></div><div class="form-field"><label for="setup-color">Cursor colour</label><input id="setup-color" type="color" value="${state.color}" style="height:44px;padding:4px"></div><div class="form-field"><label for="setup-bio">Bio (optional)</label><input id="setup-bio" maxlength="240" placeholder="A little about you" value="${esc(state.bio)}"></div></div>`;
-      if(step===2&&isNewProfile)body=`<div class="setup-step-copy"><div class="page-kicker">STEP 2 OF 2</div><h2>Profile ready</h2><p>Your new profile is separate from the others on this browser. You can update your profile details at any time.</p></div><div class="setup-review"><span class="setup-review-label">NEW PROFILE</span><strong>${esc(state.name||'Your profile')}</strong><small>Cursor colour and bio are saved locally.</small></div>`;
-      if(step===2&&!isNewProfile)body=`<div class="setup-step-copy"><div class="page-kicker">STEP 2 OF ${total}</div><h2>Set up your workspace</h2><p>Choose a subtle accent and the navigation density you prefer. These choices can be changed at any time.</p></div><div class="setting-row setup-setting"><div class="setting-copy"><strong>Workspace accent</strong><small>Used for selection states, controls and highlights.</small></div><div class="swatches">${['#e9c96b','#c8a1a0','#9eafa0','#9aa9bd','#b3a0c2','#d69c6c','#8f9b6a'].map(color=>`<button type="button" class="swatch ${state.accent===color?'active':''}" style="background:${color}" data-setup-accent="${color}" aria-label="Select accent colour ${color}"></button>`).join('')}</div></div><div class="setting-row setup-setting"><div class="setting-copy"><strong>Navigation layout</strong><small>Choose comfortable labels or a compact sidebar.</small></div><select id="setup-compact" class="select-control"><option value="comfortable" ${!state.compact?'selected':''}>Comfortable</option><option value="compact" ${state.compact?'selected':''}>Compact</option></select></div><div class="setting-row setup-setting"><div class="setting-copy"><strong>Motion effects</strong><small>Keep interface transitions and animations enabled.</small></div><select id="setup-motion" class="select-control"><option value="full" ${!state.reduceMotion?'selected':''}>Enabled</option><option value="reduced" ${state.reduceMotion?'selected':''}>Reduced motion</option></select></div>`;
-      if(step===3) {
-        const choices=await storageChoices(state.unit);
-        if(choices.length && !choices.includes(state.amount)){state.amount=choices.reduce((best,value)=>Math.abs(value-state.amount)<Math.abs(best-state.amount)?value:best,choices[0]);}
-        body=`<div class="setup-step-copy"><div class="page-kicker">STEP 3 OF ${total}</div><h2>Choose your storage cap</h2><p>Flora uses a logical limit inside browser storage. It does not reserve disk space; the browser can impose a lower quota.</p></div><div class="storage-setup-grid"><div class="form-field"><label for="setup-unit">Storage unit</label><select id="setup-unit" class="select-control"><option value="KB" ${state.unit==='KB'?'selected':''}>Kilobytes (KB)</option><option value="MB" ${state.unit==='MB'?'selected':''}>Megabytes (MB)</option><option value="GB" ${state.unit==='GB'?'selected':''}>Gigabytes (GB)</option></select></div><div class="form-field"><label for="setup-amount">Capacity</label><select id="setup-amount" class="select-control" ${choices.length?'':'disabled'}>${choices.map(amount=>`<option value="${amount}" ${amount===state.amount?'selected':''}>${amount} ${state.unit}</option>`).join('')||`<option value="">No capacity available</option>`}</select></div></div><div class="setup-storage-note">Available choices follow powers of two: 16, 32, 64, 128 and onward, bounded by the browser quota estimate.</div>`;
-      }
-      if(step===4)body=`<div class="setup-step-copy"><div class="page-kicker">STEP 4 OF ${total}</div><h2>Your workspace is ready</h2><p>Review the local-first defaults before entering Flora.</p></div><div class="setup-review-grid"><div class="setup-review"><span class="setup-review-label">PROFILE</span><strong>${esc(state.name)}</strong><small>Cursor colour saved in your profile</small></div><div class="setup-review"><span class="setup-review-label">STORAGE CAP</span><strong>${state.amount} ${state.unit}</strong><small>Logical limit in this browser</small></div><div class="setup-review"><span class="setup-review-label">WORKSPACE</span><strong>${state.compact?'Compact':'Comfortable'} navigation</strong><small>${state.reduceMotion?'Reduced':'Full'} motion effects</small></div><div class="setup-review"><span class="setup-review-label">PRIVACY</span><strong>Stored locally</strong><small>No Flora account, analytics or cloud storage.</small></div></div><p class="setup-privacy-note">Your profile details can be updated at any time from the profile menu.</p>`;
-      const progress=Array.from({length:total},(_,i)=>`<span class="setup-progress-segment ${i<step?'complete':''}"></span>`).join('');
-      showModal(`<div class="setup-modal"><div class="setup-brand"><strong>flora</strong><span>LOCAL CREATIVE WORKSPACE</span></div><div class="setup-progress">${progress}</div>${body}<div class="setup-footer">${step>1?'<button type="button" class="btn btn-ghost" id="setup-back">Back</button>':'<span class="form-hint">You can change these choices later.</span>'}<button type="button" class="btn btn-primary" id="setup-next">${step===total?(isNewProfile?'Create profile':'Enter Flora'):'Continue'}</button></div></div>`, 'Flora setup', true);
-      $('#setup-name')?.addEventListener('input',event=>state.name=event.target.value);
-      $('#setup-bio')?.addEventListener('input',event=>state.bio=event.target.value);
-      $('#setup-color')?.addEventListener('input',event=>state.color=event.target.value);
-      $('#setup-compact')?.addEventListener('change',event=>state.compact=event.target.value==='compact');
-      $('#setup-motion')?.addEventListener('change',event=>state.reduceMotion=event.target.value==='reduced');
-      $('#setup-unit')?.addEventListener('change',async event=>{const previousBytes=bytesFor(state.unit,state.amount);state.unit=event.target.value;const multiplier=state.unit==='GB'?1024**3:state.unit==='MB'?1024**2:1024;const amount=$('#setup-amount');const values=await storageChoices(state.unit);amount.innerHTML=values.map(value=>`<option value="${value}">${value} ${state.unit}</option>`).join('')||'<option value="">No capacity available</option>';amount.disabled=!values.length;if(values.length){const target=previousBytes/multiplier;state.amount=values.reduce((best,value)=>Math.abs(value-target)<Math.abs(best-target)?value:best,values[0]);amount.value=String(state.amount);}});
-      $('#setup-amount')?.addEventListener('change',event=>state.amount=Number(event.target.value));
-      $$('[data-setup-accent]').forEach(button=>button.addEventListener('click',()=>{state.accent=button.dataset.setupAccent;render();}));
-      $('#setup-back')?.addEventListener('click',()=>{step=Math.max(1,step-1);render();});
-      $('#setup-next')?.addEventListener('click',async()=>{
-        if(step===1&&!state.name.trim()){toast('Enter a display name to continue.','error');$('#setup-name')?.focus();return;}
-        if(step===3&&!state.amount){toast('Choose a storage capacity to continue.','error');return;}
-        if(step<total){step++;render();return;}
-        const newProfile={id:uid(),name:state.name.trim(),pronouns:'',bio:state.bio.trim(),color:state.color,createdAt:now()};
-        profiles.push(newProfile);await putRecord('profiles',newProfile);profile=newProfile;await setMeta('activeProfileId',profile.id);
-        if(!isNewProfile){settings={...settings,accent:state.accent,compactMode:state.compact,reduceMotion:state.reduceMotion,storageUnit:state.unit,storageAmount:state.amount,storageLimitBytes:bytesFor(state.unit,state.amount)};await saveSettings();}
-        closeModal();syncProfileHeader();setupChannel();updateStorageUI();setActiveView('home');toast(`Welcome to Flora, ${profile.name.split(' ')[0]}.`,'success');
-      });
+  async function finishSetup({ profile:person, settings:patch = {}, modeId, seed, newProfile } = {}) {
+    if (person) {
+      const created = { id:uid(), name:person.name.trim(), pronouns:person.pronouns || '', bio:person.bio || '', color:person.color || '#b89a50', createdAt:now() };
+      profiles.push(created); await putRecord('profiles', created); profile = created; await setMeta('activeProfileId', created.id);
+    }
+    if (!newProfile) {
+      const mode = FloraPresets.byId(modeId || settings.modeId);
+      settings = { ...settings, ...patch, modeId:mode.id, pinnedApps:[...mode.apps], pinnedTools:[...mode.tools], examLock:!!(patch.examLock ?? mode.patch.examLock), modeUndo:null };
+      await saveSettings();
+      if (seed) await addFiles(FloraPresets.seedFiles(mode.id, { uid }), { quiet:true });
+    }
+    syncProfileHeader(); setupChannel(); updateStorageUI(); renderSidebar();
+    setActiveView(newProfile ? 'home' : (settings.defaultView || 'home'));
+    toast(newProfile ? `Switched to ${profile.name}` : `Welcome to Flora, ${profile.name.split(' ')[0]}.`, 'success');
+  }
+  async function applyMode(id, opts = {}) {
+    const mode = FloraPresets.byId(id);
+    const values = {};
+    Object.keys(mode.patch).forEach(key => { values[key] = settings[key]; });
+    Object.assign(values, { modeId:settings.modeId, pinnedApps:settings.pinnedApps, pinnedTools:settings.pinnedTools });
+    settings = { ...settings, ...mode.patch, modeId:mode.id, pinnedApps:[...mode.apps], pinnedTools:[...mode.tools], modeUndo:{ from:settings.modeId, values } };
+    await saveSettings();
+    let added = [];
+    if (opts.seed) added = await addFiles(FloraPresets.seedFiles(mode.id, { uid }), { quiet:true });
+    renderView();
+    toast(`${mode.name} is on${added.length ? ` · ${added.length} starter file${added.length === 1 ? '' : 's'} added` : ''}`, 'success');
+  }
+  async function undoMode() {
+    const undo = settings.modeUndo; if (!undo) return;
+    settings = { ...settings, ...undo.values, modeUndo:null };
+    await saveSettings(); renderView();
+    toast(`Back to ${FloraPresets.byId(settings.modeId).name}`, 'success');
+  }
+  async function resetSettings() {
+    settings = { ...defaultSettings, storageLimitBytes:settings.storageLimitBytes, storageUnit:settings.storageUnit, storageAmount:settings.storageAmount };
+    await saveSettings(); renderView(); toast('Settings restored to Flora’s defaults.', 'success');
+  }
+  async function requestPersist() {
+    try { if (navigator.storage?.persist) return await navigator.storage.persist(); } catch {}
+    return false;
+  }
+
+  // Backup and restore. Backups are always UTF-8 so nothing is ever lost.
+  async function exportBackup() {
+    const meta = await getAll('meta');
+    const payload = { format:'flora-backup-v1', createdAt:now(), profiles, files, meta:Object.fromEntries(meta.filter(item => item.key !== 'activeProfileId').map(item => [item.key, item.value])) };
+    const blob = new Blob([FloraEncoding.encode(JSON.stringify(payload), 'utf-8').bytes], { type:'application/json; charset=utf-8' });
+    downloadBlob(blob, `flora-backup-${new Date().toISOString().slice(0,10)}.json`);
+    await saveSettings({ lastBackupAt:now() });
+    toast(`Backup downloaded (${files.length} file${files.length === 1 ? '' : 's'})`, 'success');
+  }
+  async function importBackup(file, { withSettings = false } = {}) {
+    const read = await readFileText(file);
+    let payload; try { payload = JSON.parse(read.text); } catch { throw new Error('That file is not valid JSON.'); }
+    if (payload?.format !== 'flora-backup-v1' || !Array.isArray(payload.files)) throw new Error('That is not a Flora backup file.');
+    let addedFiles = 0, updatedFiles = 0, addedProfiles = 0;
+    for (const person of payload.profiles || []) if (person?.id && !profiles.some(item => item.id === person.id)) { profiles.push(person); await putRecord('profiles', person); addedProfiles++; }
+    for (const incoming of payload.files) {
+      if (!incoming?.id || !appTypes.includes(incoming.type)) continue;
+      const existing = files.find(item => item.id === incoming.id);
+      if (!existing) { files.push(incoming); await putRecord('files', incoming); addedFiles++; }
+      else if (new Date(incoming.updatedAt) > new Date(existing.updatedAt)) { files[files.indexOf(existing)] = incoming; await putRecord('files', incoming); updatedFiles++; }
+    }
+    for (const [key, value] of Object.entries(payload.meta || {})) { if (key === 'settings' && !withSettings) continue; await setMeta(key, value); }
+    await loadAll(); window._floraTasks = await getMeta('tasks', []);
+    renderSidebar(); updateStorageUI(); renderView();
+    return { addedFiles, updatedFiles, addedProfiles };
+  }
+
+  // Effects
+  function countUp(el, to, { duration = 900, format = value => String(Math.round(value)) } = {}) {
+    if (!el) return;
+    if (animOff() || settings.countUp === false) { el.textContent = format(to); return; }
+    const start = performance.now();
+    const tick = now => {
+      const t = Math.min(1, (now - start) / (duration / (Number(settings.animSpeed) || 1)));
+      el.textContent = format(to * (1 - Math.pow(1 - t, 3)));
+      if (t < 1 && el.isConnected) requestAnimationFrame(tick); else el.textContent = format(to);
     };
-    render();
+    requestAnimationFrame(tick);
   }
+  document.addEventListener('pointerdown', event => {
+    if (!settings.ripple || animLevel() !== 'full') return;
+    const host = event.target.closest('.btn,.android-row,.storage-row,.free-card,.chooser-option,.mode-card');
+    if (!host || host.disabled) return;
+    const box = host.getBoundingClientRect(), size = Math.max(box.width, box.height) * 2;
+    const wave = document.createElement('span');
+    wave.className = 'ripple';
+    wave.style.cssText = `width:${size}px;height:${size}px;left:${event.clientX - box.left - size / 2}px;top:${event.clientY - box.top - size / 2}px`;
+    host.append(wave); setTimeout(() => wave.remove(), 700);
+  });
+
+  // Command palette
+  function paletteCommands() {
+    const list = [];
+    const add = (label, hint, run) => list.push({ label, hint, run });
+    add('Home', 'Go to', () => setActiveView('home')); add('My files', 'Go to', () => setActiveView('files'));
+    if (!settings.examLock) { add('Shared with me', 'Go to', () => setActiveView('shared')); add('All tools', 'Go to', () => setActiveView('tools')); }
+    add('Settings', 'Go to', () => setActiveView('settings')); add('Storage', 'Go to', () => setActiveView('storage'));
+    add('Import a file', 'Action', () => showImportModal());
+    appTypes.forEach(type => add(`New ${fileInfo[type].short.toLowerCase()}`, fileInfo[type].label, () => createFile(type)));
+    appTypes.forEach(type => add(fileInfo[type].label, 'Open application', () => setActiveView('app', type)));
+    allTools().forEach(tool => add(tool.title, 'Open tool', () => setActiveView(tool.id)));
+    (Core.settingsIndex ? Core.settingsIndex() : []).forEach(page => add(`Settings: ${page.title}`, 'Settings', () => Core.openSettings(page.id)));
+    FloraPresets.MODES.forEach(mode => add(`Switch to ${mode.name}`, 'Mode', () => (Core.chooseMode ? Core.chooseMode(mode.id) : applyMode(mode.id))));
+    [['light','Light'],['dark','Dark'],['paper','Paper'],['auto','Match system']].forEach(([value, label]) => add(`Theme: ${label}`, 'Appearance', () => saveSettings({ theme:value })));
+    add('Export a backup', 'Data', () => exportBackup());
+    files.forEach(file => add(file.name, fileInfo[file.type]?.short || 'File', () => openFile(file.id)));
+    return list;
+  }
+  function openPalette() {
+    const commands = paletteCommands();
+    let results = commands.slice(0, 9), active = 0;
+    $('#modal-root').innerHTML = `<div class="modal-backdrop palette-backdrop"><section class="palette-card" role="dialog" aria-modal="true" aria-label="Search Flora"><input id="palette-input" class="palette-input" placeholder="Search files, applications, tools and settings…" autocomplete="off" aria-label="Search"><div class="palette-list" id="palette-list" role="listbox"></div><div class="palette-foot"><span><span class="kbd">↑</span> <span class="kbd">↓</span> move</span><span><span class="kbd">Enter</span> open</span><span><span class="kbd">Esc</span> close</span></div></section></div>`;
+    const input = $('#palette-input'), listEl = $('#palette-list');
+    const paint = () => { listEl.innerHTML = results.length ? results.map((item, i) => `<button class="palette-item ${i === active ? 'active' : ''}" role="option" data-palette="${i}"><span>${esc(item.label)}</span><small>${esc(item.hint)}</small></button>`).join('') : '<div class="palette-empty">Nothing matches that.</div>'; listEl.querySelector('.active')?.scrollIntoView({ block:'nearest' }); };
+    const run = i => { const item = results[i]; if (!item) return; closeModal(); item.run(); };
+    input.addEventListener('input', () => {
+      const words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+      results = commands.map(c => { const hay = (c.label + ' ' + c.hint).toLowerCase(); if (!words.every(w => hay.includes(w))) return null; return { c, score:(c.label.toLowerCase().startsWith(words[0] || '') ? 0 : 1) }; }).filter(Boolean).sort((a, b) => a.score - b.score).slice(0, 9).map(x => x.c);
+      if (!words.length) results = commands.slice(0, 9);
+      active = 0; paint();
+    });
+    input.addEventListener('keydown', event => {
+      if (event.key === 'ArrowDown') { event.preventDefault(); active = Math.min(results.length - 1, active + 1); paint(); }
+      if (event.key === 'ArrowUp') { event.preventDefault(); active = Math.max(0, active - 1); paint(); }
+      if (event.key === 'Enter') { event.preventDefault(); run(active); }
+    });
+    listEl.addEventListener('click', event => { const btn = event.target.closest('[data-palette]'); if (btn) run(Number(btn.dataset.palette)); });
+    $('.palette-backdrop').addEventListener('click', event => { if (event.target.classList.contains('palette-backdrop')) closeModal(); });
+    paint(); input.focus();
+  }
+
   async function showProfileSwitcher() {
     const html=`<h2>Your local profiles</h2><p>Switch between profiles stored in this browser, or create another one.</p><div class="profile-list">${profiles.map(item=>`<button class="profile-option" data-switch-profile="${item.id}"><span class="avatar" style="--avatar-color:${esc(item.color)}">${esc(item.name.slice(0,1).toUpperCase())}</span><span style="flex:1"><strong>${esc(item.name)}</strong><small>Local profile${item.bio?' · '+esc(item.bio.slice(0,72)):''}${item.id===profile.id?' · Current profile':''}</small></span>${item.id===profile.id?'<span class="tag">Active</span>':''}</button>`).join('')}</div><div class="form-foot"><button class="btn btn-secondary" data-new-profile>Create profile</button><span style="flex:1"></span><button class="btn btn-ghost btn-small" data-edit-profile>Edit current profile</button><button class="btn btn-ghost" data-modal-close>Close</button></div>`;
     showModal(html,'Profiles');
@@ -1039,10 +1366,16 @@
 
   function renderView() {
     updateNav();
+    const viewHost = $('#view-root'); if (viewHost) { viewHost.onclick = viewHost.oninput = viewHost.onchange = viewHost.onkeydown = null; }
+    const registered = viewRegistry.get(currentView);
+    if (registered) {
+      const crumb = typeof registered.crumb === 'function' ? registered.crumb() : registered.crumb;
+      if (crumb) setBreadcrumb(crumb[0], crumb[1]);
+      return registered.render($('#view-root'));
+    }
     if(currentView==='home')return renderHome();
     if(currentView==='files')return renderFiles();
     if(currentView==='shared')return renderShared();
-    if(currentView==='storage')return renderStorage();
     if(currentView==='tools')return renderTools();
     if(currentView==='amethyst')return renderAmethyst();
     if(currentView==='tasks')return renderTasks();
@@ -1055,21 +1388,22 @@
   // Event delegation keeps the static app shell light and dependency-free.
   document.addEventListener('click', async event => {
     const target=event.target.closest('button,[data-open],[data-export]');if(!target)return;
+    if(target.matches('[data-pin-tool]')){const id=target.dataset.pinTool;const set=new Set(settings.pinnedTools||[]);if(set.has(id))set.delete(id);else set.add(id);await saveSettings({pinnedTools:[...set]});const on=set.has(id);target.classList.toggle('on',on);target.textContent=on?'Pinned':'Pin';target.setAttribute('aria-pressed',String(on));target.title=on?'Remove from sidebar':'Pin to sidebar';return;}
     if(target.matches('[data-view]')){setActiveView(target.dataset.view);return;}
     if(target.matches('[data-app]')){setActiveView('app',target.dataset.app);return;}
     if(target.matches('[data-create]')){await createFile(target.dataset.create);return;}
     if(target.matches('[data-open]')){openFile(target.dataset.open);return;}
     if(target.matches('[data-export]')){const file=files.find(f=>f.id===target.dataset.export);if(file)showExportModal(file);return;}
-    if(target.matches('[data-settings-tab]')){settingsTab=target.dataset.settingsTab;renderSettings();return;}
-    if(target.matches('[data-setting-toggle]')){const key=target.dataset.settingToggle;settings[key]=!settings[key];await saveSettings();renderSettings();return;}
-    if(target.matches('[data-accent]')){settings.accent=target.dataset.accent;await saveSettings();renderSettings();return;}
     if(target.matches('[data-format]')){const editor=$('#document-editor');editor?.focus();const command=target.dataset.format;if(command==='createLink'){const url=prompt('Enter a link URL');if(url)document.execCommand(command,false,url);}else document.execCommand(command,false,null);if(editor)scheduleSave('editing');return;}
     if(target.matches('[data-slide-index]')){slideIndex=Number(target.dataset.slideIndex);renderSlide();broadcastPresence('selecting');return;}
     if(target.matches('[data-action]')){
       const action=target.dataset.action;
       if(action==='import')showImportModal();
+      if(action==='palette')openPalette();
+      if(action==='exit-mode'){if(settings.modeUndo)await undoMode();else await applyMode('standard');}
+      if(action==='change-mode'){if(Core.showModePicker)Core.showModePicker();else setActiveView('settings');}
       if(action==='explore')setActiveView('tools');
-      if(action==='new-file')showModal(`<h2>What would you like to make?</h2><p>Choose a Flora workspace.</p><div class="app-grid" style="grid-template-columns:repeat(2,1fr)">${appCard('doc','Azalea Docs','Write and format')}${appCard('sheet','Amaryllis Sheets','Tables and formulas')}${appCard('slides','Iris Presentations','Present your ideas')}${appCard('note','Anemone Notes','Quick thoughts')}${appCard('board','Dahlia Boards','Arrange ideas')}</div><div class="form-foot"><button class="btn btn-ghost" data-modal-close>Cancel</button></div>`, 'Create a file', true);
+      if(action==='new-file')showModal(`<h2>What would you like to make?</h2><p>Choose a Flora workspace.</p><div class="app-grid app-grid-modal">${appTypes.map(type=>appCard(type,fileInfo[type].label,fileInfo[type].blurb||'')).join('')}</div><div class="form-foot"><button class="btn btn-ghost" data-modal-close>Cancel</button></div>`, 'Create a file', true);
       if(action==='back-files'){setActiveView('files');}
       if(action==='export-active'&&activeFile)showExportModal(activeFile);
       if(action==='collaborate')showCollaborationModal();
@@ -1107,14 +1441,15 @@
       $('#file-delete').onclick=()=>{closeModal();deleteFile(file.id);};
     }
     if(target.matches('[data-task-delete]')){const index=Number(target.dataset.taskDelete);window._floraTasks.splice(index,1);await setMeta('tasks',window._floraTasks);renderTasks();}
-    if(target.matches('[data-focus-mode]')){focusMode=target.dataset.focusMode;focusRunning=false;clearInterval(focusTimer);focusSeconds=(focusMode==='focus'?25:5)*60;renderFocus();}
-    if(target.matches('[data-focus-toggle]')){if(focusRunning){focusRunning=false;clearInterval(focusTimer);}else{focusRunning=true;focusTimer=setInterval(()=>{focusSeconds=Math.max(0,focusSeconds-1);const output=$('#focus-time');if(output)output.textContent=`${Math.floor(focusSeconds/60).toString().padStart(2,'0')}:${(focusSeconds%60).toString().padStart(2,'0')}`;if(focusSeconds===0){focusRunning=false;clearInterval(focusTimer);toast('Your session is complete. Take a breath.','success');renderFocus();}},1000);}renderFocus();}
-    if(target.matches('[data-focus-reset]')){focusRunning=false;clearInterval(focusTimer);focusSeconds=(focusMode==='focus'?25:5)*60;renderFocus();}
+    if(target.matches('[data-focus-mode]')){resetFocus(target.dataset.focusMode);}
+    if(target.matches('[data-focus-toggle]')){toggleFocus();}
+    if(target.matches('[data-focus-reset]')){resetFocus();}
     if(target.matches('[data-board-delete]')){activeFile.content=activeFile.content.filter(note=>note.id!==target.dataset.boardDelete);renderBoard();scheduleSave('deleting');}
   });
 
   document.addEventListener('input', event=>{
     const target=event.target;
+    if(target.id==='tool-search'){const q=target.value.toLowerCase().trim();let any=false;$$('.tool-tile').forEach(tile=>{const hit=!q||tile.dataset.toolName.includes(q);tile.hidden=!hit;if(hit)any=true;});$$('.tool-group').forEach(group=>{group.hidden=!$$('.tool-tile',group).some(tile=>!tile.hidden);});const empty=$('#tool-empty');if(empty)empty.hidden=any;return;}
     if(target.id==='file-search'){renderFiles(target.value);const search=$('#file-search');search?.focus();if(search){search.setSelectionRange(search.value.length,search.value.length);}return;}
     if(target.id==='document-editor'){scheduleSave('typing');broadcastActionFromInput(event);return;}
     if(target.id==='note-editor'){scheduleSave('typing');broadcastActionFromInput(event);return;}
@@ -1137,19 +1472,9 @@
     if(event.target.id==='font-size'){const editor=$('#document-editor');if(editor){editor.focus();document.execCommand('fontSize',false,event.target.value);scheduleSave('editing');}return;}
     if(event.target.id==='font-color'){const editor=$('#document-editor');if(editor){editor.focus();document.execCommand('foreColor',false,event.target.value);scheduleSave('editing');}return;}
     if(event.target.id==='highlight-color'){const editor=$('#document-editor');if(editor){editor.focus();document.execCommand('hiliteColor',false,event.target.value);scheduleSave('editing');}return;}
-    if(event.target.id==='file-filter'){
-      const query=$('#file-search')?.value||'';const type=event.target.value;
-      const visible=[...files].sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt)).filter(f=>(f.name.toLowerCase().includes(query.toLowerCase())||fileInfo[f.type].label.toLowerCase().includes(query.toLowerCase()))&&(type==='all'||f.type===type));
-      $('#file-list-region').innerHTML=visible.length?`<div class="file-grid">${visible.map(file=>`<div class="file-card"><div class="file-card-head">${fileIcon(file)}<button class="btn btn-ghost btn-small" data-menu-file="${file.id}">Options</button></div><div class="file-card-title">${esc(file.name)}</div><div class="file-card-meta">${fileInfo[file.type].short} · ${prettyDate(file.updatedAt)}</div><div class="file-card-actions"><button class="btn btn-secondary btn-small" data-open="${file.id}">Open</button><button class="btn btn-ghost btn-small" data-export="${file.id}">Export</button></div></div>`).join('')}</div>`:`<div class="panel"><div class="empty-state"><h3>No matching files</h3><p>Try another filter.</p></div></div>`;
-    }
+    if(event.target.id==='file-filter'){fileTypeFilter=event.target.value;refreshFileList();return;}
+    if(event.target.id==='file-sort'){await saveSettings({sortFiles:event.target.value});refreshFileList();return;}
     if(event.target.matches('[data-task-toggle]')){const index=Number(event.target.dataset.taskToggle);if(window._floraTasks[index]){window._floraTasks[index].done=event.target.checked;await setMeta('tasks',window._floraTasks);renderTasks();}return;}
-    if(event.target.id==='storage-unit'){await populateStorageAmount();}
-    if(event.target.id==='storage-amount'||event.target.id==='storage-unit'){
-      const unit=$('#storage-unit').value,amount=Number($('#storage-amount').value);
-      if(!amount){toast(`16 ${unit} is above the browser quota estimate. Choose a smaller unit.`,'error');return;}
-      settings.storageUnit=unit;settings.storageAmount=amount;settings.storageLimitBytes=amount*(unit==='GB'?1024**3:unit==='MB'?1024**2:1024);
-      await saveSettings();toast(`Storage limit set to ${amount} ${unit}`,'success');
-    }
     if(event.target.id==='formula-input'){
       const name=cellName(selectedCell.row,selectedCell.col);activeFile.content.cells[name]=event.target.value;renderSheetGrid();scheduleSave('typing');return;
     }
@@ -1171,6 +1496,8 @@
   });
   document.addEventListener('keydown',event=>{
     if(event.key==='Escape' && $('#modal-root').innerHTML)closeModal();
+    if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){event.preventDefault();openPalette();return;}
+    if((event.ctrlKey||event.metaKey)&&event.key===','){event.preventDefault();setActiveView('settings');return;}
     if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){
       if(activeFile){event.preventDefault();clearTimeout(saveTimer);saveCurrentContent('editing').then(()=>toast('Saved','success'));}
     }
@@ -1194,6 +1521,14 @@
     }
   });
 
+  $('#mode-chip')?.addEventListener('click',()=>{if(settings.examLock){if(settings.modeUndo)undoMode();else applyMode('standard');}else if(Core.showModePicker)Core.showModePicker();else setActiveView('settings');});
+  $('#palette-button')?.addEventListener('click',openPalette);
+  if(window.matchMedia){
+    const darkQuery=window.matchMedia('(prefers-color-scheme: dark)');const motionQuery=window.matchMedia('(prefers-reduced-motion: reduce)');
+    const onSystemChange=()=>{if(profile)applySettings();};
+    (darkQuery.addEventListener?darkQuery.addEventListener.bind(darkQuery,'change'):darkQuery.addListener.bind(darkQuery))(onSystemChange);
+    (motionQuery.addEventListener?motionQuery.addEventListener.bind(motionQuery,'change'):motionQuery.addListener.bind(motionQuery))(onSystemChange);
+  }
   $('#profile-switcher').addEventListener('click',showProfileSwitcher);
   $('#top-profile').addEventListener('click',showProfileSwitcher);
   $('#help-button').addEventListener('click',showHelpModal);
@@ -1209,16 +1544,44 @@
     window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
   }
 
+  const Core = window.FloraCore = {
+    $, $$, esc, uid, now, formatBytes, prettyDate, toast, hexToRgb, mixHex,
+    fileInfo, appTypes, registerApp, registerTool, registerView, allTools,
+    get settings() { return settings; }, get files() { return files; }, get profiles() { return profiles; }, get profile() { return profile; },
+    get currentView() { return currentView; }, get lastView() { return lastView; }, ui,
+    saveSettings, getMeta, setMeta, getAllMeta:() => getAll('meta'), putRecord, deleteRecord,
+    setActiveView, renderView, openFile, createFile, addFiles, deleteFiles, setBreadcrumb,
+    activeFile:() => activeFile, changed:action => scheduleSave(action || 'typing'),
+    localDataSize, fileSize, storageEstimate, storageChoices, storageQuotaBytes,
+    exportFile, downloadBlob, textBlob, readFileText, safeFilename, dataURLToBlob,
+    applyMode, undoMode, resetSettings, requestPersist, exportBackup, importBackup, finishSetup,
+    showModal, closeModal, showProfileEditor, showImportModal, openPalette, countUp, chime, animOff, animLevel, playViewEnter,
+    previewSettings, metaSizes:() => ({ ...metaSizes }), forgetMeta:key => { delete metaSizes[key]; }, refreshSidebar:renderSidebar, setup:null, showModePicker:null, chooseMode:null, settingsIndex:null, openSettings:null
+  };
+  function fileSize(file) { try { return new Blob([JSON.stringify(file)]).size; } catch { return JSON.stringify(file).length * 2; } }
+  function hideSplash() {
+    const splash = $('#splash'); if (!splash) return;
+    const wait = (settings.startupAnim === false || animOff()) ? 0 : 650;
+    setTimeout(() => { splash.classList.add('done'); setTimeout(() => splash.remove(), 500); }, wait);
+  }
+
   async function boot() {
     try { db=await openDB(); }
     catch(error) { dbFallback=true; try{localStorage.setItem('flora:fallback-check','1');localStorage.removeItem('flora:fallback-check');}catch{document.body.innerHTML='<main style="max-width:600px;margin:10vh auto;padding:30px;font:16px Georgia"><h1>Flora could not access local storage</h1><p>Please open Flora in a normal browser window, not private browsing, and allow site storage.</p></main>';return;} }
     await loadAll();
+    if (settings.largeText && Number(settings.textScale) === 100) { settings.textScale = 113; settings.largeText = false; await setMeta('settings', settings); applySettings(); }
+    focusSeconds = focusLength();
     window._floraTasks=await getMeta('tasks',[]);
     const activeId=await getMeta('activeProfileId',null);
     profile=profiles.find(item=>item.id===activeId)||profiles[0]||null;
-    if(profile){await setMeta('activeProfileId',profile.id);syncProfileHeader();setupChannel();updateStorageUI();setActiveView('home');}
+    renderSidebar();
+    if(profile){await setMeta('activeProfileId',profile.id);syncProfileHeader();setupChannel();updateStorageUI();setActiveView(settings.defaultView||'home');
+      const days=Number(settings.backupReminderDays)||0;
+      if(days&&(!settings.lastBackupAt||Date.now()-new Date(settings.lastBackupAt)>days*864e5))setTimeout(()=>toast('It has been a while since your last backup. Settings › Privacy and data has one-click backup.'),2500);}
     else {showSetupModal(false);}
     if(dbFallback)toast('Using browser localStorage fallback. Large workspaces may be limited.');
+    hideSplash();
   }
-  boot().catch(error=>{console.error(error);toast('Flora could not start. Check browser storage permissions.','error');});
+  const start = () => boot().catch(error=>{console.error(error);toast('Flora could not start. Check browser storage permissions.','error');hideSplash();});
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 })();

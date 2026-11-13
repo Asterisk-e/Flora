@@ -1,6 +1,6 @@
 /* Static asset cache for localhost/HTTPS installs. User files remain in IndexedDB. */
-const CACHE_NAME = 'flora-static-v4';
-const CORE_FILES = ['./', './index.html', './styles.css', './export-formats.js', './app.js', './README.md'];
+const CACHE_NAME = 'flora-static-v5';
+const CORE_FILES = ['./', './index.html', './theme.css', './styles.css', './features.css', './export-formats.js', './encoding.js', './presets.js', './app.js', './apps.js', './tools.js', './settings.js', './storage.js', './setup.js', './README.md'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(CORE_FILES)).then(() => self.skipWaiting()));
 });
