@@ -60,7 +60,9 @@
     accent:'#e9c96b', storageLimitBytes:64 * 1024 * 1024, storageUnit:'MB', storageAmount:64,
     compactMode:false, spellcheck:true, localOnly:true,
     // look and feel
-    theme:'light', fontFamily:'serif', textScale:100, density:'comfortable', bigTargets:false, underlineLinks:false, readableSpacing:false,
+    devUnlocked:false, devEnabled:false, devSmooth:'auto', devRender:'auto', devLigatures:true, devKerning:true, devTabular:false, devStroke:'0px', devDir:'auto',
+    devLetter:0, devWord:0, devLineHeight:0, devBounds:false, devPointer:false, devShowIds:false, devPerf:false, devAnimScale:1, devStayAwake:false,
+    androidUI:true, theme:'light', fontFamily:'serif', textScale:100, density:'comfortable', bigTargets:false, underlineLinks:false, readableSpacing:false,
     // motion
     animLevel:'full', animSpeed:1, pageTransition:'rise', startupAnim:true, ripple:true, countUp:true,
     // text and encoding
@@ -216,7 +218,7 @@
     return choice;
   }
   function systemReducesMotion() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
-  function animLevel() { return (settings.reduceMotion || systemReducesMotion()) ? 'off' : (settings.animLevel || 'full'); }
+  function animLevel() { if (settings.devEnabled && Number(settings.devAnimScale) === 0) return 'off'; return (settings.reduceMotion || systemReducesMotion()) ? 'off' : (settings.animLevel || 'full'); }
   function animOff() { return animLevel() === 'off'; }
   function applySettings() {
     const html = document.documentElement, body = document.body;
@@ -226,7 +228,8 @@
     html.dataset.anim = animLevel();
     html.dataset.transition = settings.pageTransition || 'rise';
     html.style.setProperty('--font-ui', FONT_STACKS[settings.fontFamily] || FONT_STACKS.serif);
-    html.style.setProperty('--anim-speed', String(Math.max(.25, Math.min(3, Number(settings.animSpeed) || 1))));
+    const devScale = settings.devEnabled && Number(settings.devAnimScale) > 0 ? Number(settings.devAnimScale) : 1;
+    html.style.setProperty('--anim-speed', String(Math.max(.05, Math.min(3, (Number(settings.animSpeed) || 1) / devScale))));
     const accent = settings.accent || defaultSettings.accent;
     html.style.setProperty('--accent', accent);
     html.style.setProperty('--accent-ink', luminance(accent) > .42 ? '#2f2813' : '#ffffff');
@@ -234,6 +237,7 @@
     html.style.setProperty('--accent-strong', mixHex(accent, theme === 'dark' ? '#ffffff' : '#000000', theme === 'dark' ? .1 : .38));
     const scale = Math.max(80, Math.min(160, Number(settings.textScale) || 100)) * (settings.largeText && Number(settings.textScale || 100) === 100 ? 1.13 : 1);
     body.style.zoom = scale === 100 ? '' : String(scale / 100);
+    body.classList.toggle('android-ui', settings.androidUI !== false);
     body.classList.toggle('high-contrast', !!settings.highContrast);
     body.classList.toggle('reduce-motion', animLevel() === 'off');
     body.classList.toggle('compact-sidebar', !!settings.compactMode || !!settings.examLock);
@@ -250,6 +254,7 @@
     compactButton?.setAttribute('aria-pressed', String(!!settings.compactMode));
     if (compactButton) compactButton.textContent = settings.compactMode ? 'Expand' : 'Compact';
     updateModeChip();
+    window.FloraDev?.apply(settings);
   }
   function toast(message, kind = '') {
     if (settings.quietToasts && kind !== 'error') return;
@@ -373,6 +378,7 @@
   }
   function setActiveView(view, app = null, opts = {}) {
     flushCurrentContent();
+    window.FloraDev?.log('info', `View: ${view}${app ? ' / ' + app : ''}`, 'nav');
     if (settings.examLock && ['shared','tools'].includes(view)) view = 'home';
     if (currentView !== view || currentApp !== app) lastView = currentView === 'editor' ? 'files' : currentView;
     viewRegistry.get(currentView)?.leave?.();
@@ -495,6 +501,7 @@
     grid.hidden = !cards.length;
   }
   function renderHome() {
+    if (settings.androidUI !== false) return renderHomeAndroid();
     setBreadcrumb('Workspace','Home');
     const dayLabel = new Intl.DateTimeFormat(undefined,{weekday:'long'}).format(new Date()).toUpperCase();
     const recent = getRecentFiles(6);
@@ -522,6 +529,36 @@
       <div class="recent-list">${recent.length ? recent.map(fileRow).join('') : `<div class="empty-state"><h3>Your workspace is ready</h3><p>Create a document, spreadsheet, presentation or note. Your work is saved on this device.</p></div>`}</div>`;
     fillToday();
   }
+  const fabHTML = () => `<div class="fab-wrap"><button class="fab" data-action="new-file" aria-label="New file"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span>New</span></button></div>`;
+  function renderHomeAndroid() {
+    setBreadcrumb('Workspace','Home');
+    const icon = (name, size) => (Core.icon ? Core.icon(name, size) : '');
+    const now = new Date(), hour = now.getHours();
+    const greeting = hour < 5 ? 'Still up' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+    const dateText = new Intl.DateTimeFormat(undefined, { weekday:'long', day:'numeric', month:'long' }).format(now);
+    const mode = FloraPresets.byId(settings.modeId), lock = !!settings.examLock;
+    const pinned = (settings.pinnedApps || []).filter(type => fileInfo[type]);
+    const apps = pinned.length ? pinned : appTypes;
+    const used = localDataSize(), pct = Math.min(100, Math.round(used / Math.max(1, settings.storageLimitBytes) * 100));
+    const recent = getRecentFiles(6);
+    const tile = (attr, value, glyph, label, color) => `<button class="launcher-item" ${attr}="${esc(value)}"><span class="launcher-icon" style="--c:${color}">${esc(glyph)}</span><span class="launcher-label">${esc(label)}</span></button>`;
+    const dock = [['files','files','My files'], ...(lock ? [] : [['tools','tools','Tools']]), ['storage','storage','Storage'], ['settings','settings','Settings']];
+    const banner = lock
+      ? `<section class="mode-banner exam"><div><strong>Exam mode is on</strong><small>Notifications are muted and only revision tools are shown.</small></div><button class="btn btn-secondary btn-small" data-action="exit-mode">Leave exam mode</button></section>` : '';
+    $('#view-root').innerHTML = `
+      <section class="glance"><div class="glance-greet">${greeting}, ${esc(profile.name.split(' ')[0])}</div><h1 class="glance-date">${dateText}</h1>
+        <div class="glance-chips"><button class="glance-chip" data-action="${lock ? 'exit-mode' : 'change-mode'}">${esc(lock ? 'Exam mode' : mode.name)}</button><span class="glance-chip">${files.length} file${files.length === 1 ? '' : 's'}</span><button class="glance-chip" data-view="storage">${pct}% of storage</button></div></section>
+      <button class="home-search" data-action="palette" aria-label="Search Flora">${icon('search', 22)}<span>Search files, apps and settings</span><span class="kbd">Ctrl K</span></button>
+      ${banner}
+      ${settings.showToday ? `<div class="today-grid widgets" id="today-grid" hidden></div>` : ''}
+      <h2 class="android-section home-section">Apps</h2>
+      <div class="launcher">${apps.map(type => tile('data-app', type, fileInfo[type].glyph || type.slice(0, 2).toUpperCase(), fileInfo[type].label, appAccent(type))).join('')}</div>
+      <nav class="dock" aria-label="Shortcuts">${dock.map(([view, ico, label]) => `<button class="dock-item" data-view="${view}"><span class="dock-icon">${icon(ico, 24)}</span><span>${label}</span></button>`).join('')}</nav>
+      <h2 class="android-section home-section">Recent files</h2>
+      <div class="recent-list">${recent.length ? recent.map(fileRow).join('') : `<div class="empty-state"><h3>Your workspace is ready</h3><p>Tap New to create a document, spreadsheet, presentation or note. Everything is saved on this device.</p></div>`}</div>
+      ${fabHTML()}`;
+    fillToday();
+  }
   function renderAppLanding(type) {
     const info = fileInfo[type];
     const matching = getRecentFiles(50).filter(file => file.type === type);
@@ -545,7 +582,7 @@
   function fileGridHTML(query = '', type = 'all') {
     const visible = sortedFiles(query, type);
     if (!visible.length) return `<div class="panel"><div class="empty-state"><h3>${query || type !== 'all' ? 'No matching files' : 'Your library is ready'}</h3><p>${query || type !== 'all' ? 'Try a different search or filter.' : 'Create your first file or import an existing one.'}</p></div></div>`;
-    return `<div class="file-grid">${visible.map(file => `<div class="file-card"><div class="file-card-head">${fileIcon(file)}<button class="btn btn-ghost btn-small" data-menu-file="${file.id}" title="File options">Options</button></div><div class="file-card-title" title="${esc(file.name)}">${esc(file.name)}</div><div class="file-card-meta">${fileInfo[file.type]?.short || 'File'} · ${prettyDate(file.updatedAt)} · ${formatBytes(fileSize(file))}</div><div class="file-card-actions"><button class="btn btn-secondary btn-small" data-open="${file.id}">Open</button><button class="btn btn-ghost btn-small" data-export="${file.id}">Export</button></div></div>`).join('')}</div>`;
+    return `<div class="file-grid">${visible.map(file => `<div class="file-card"><div class="file-card-head">${fileIcon(file)}<button class="btn btn-ghost btn-small" data-menu-file="${file.id}" title="File options">Options</button></div><div class="file-card-title" title="${esc(file.name)}">${esc(file.name)}</div><div class="file-card-meta">${fileInfo[file.type]?.short || 'File'} · ${prettyDate(file.updatedAt)} · ${formatBytes(fileSize(file))}${settings.devEnabled && settings.devShowIds ? ` · <code class="dev-id">${esc(file.id)}</code>` : ''}</div><div class="file-card-actions"><button class="btn btn-secondary btn-small" data-open="${file.id}">Open</button><button class="btn btn-ghost btn-small" data-export="${file.id}">Export</button></div></div>`).join('')}</div>`;
   }
   function refreshFileList() {
     const region = $('#file-list-region'); if (!region) return;
@@ -555,7 +592,7 @@
     setBreadcrumb('Workspace','My files');
     $('#view-root').innerHTML = `<div class="welcome-row"><div><div class="page-kicker">YOUR LOCAL LIBRARY</div><h1 class="page-title">My files</h1><p class="page-subtitle">Everything you make in Flora, kept together and under your control.</p></div><div class="welcome-actions"><button class="btn btn-secondary" data-action="import">Import file</button><button class="btn btn-primary" data-action="new-file">New file</button></div></div>
       <div class="toolbar-row"><div class="search-field"><input id="file-search" type="search" placeholder="Search your files…" value="${esc(filter)}" aria-label="Search files"></div><div style="display:flex;gap:7px;flex-wrap:wrap"><select id="file-filter" class="select-control" aria-label="Filter by type"><option value="all">All types</option>${appTypes.map(type => `<option value="${type}" ${fileTypeFilter === type ? 'selected' : ''}>${fileInfo[type].short}s</option>`).join('')}</select><select id="file-sort" class="select-control" aria-label="Sort files">${[['recent','Recently edited'],['name','Name'],['size','Size'],['type','Type']].map(([v,l]) => `<option value="${v}" ${settings.sortFiles === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
-      <div id="file-list-region">${fileGridHTML(filter, fileTypeFilter)}</div>`;
+      <div id="file-list-region">${fileGridHTML(filter, fileTypeFilter)}</div>${settings.androidUI !== false ? fabHTML() : ''}`;
   }
   function renderShared() {
     const shared = files.filter(file => (file.collaborators || []).includes(profile.id) || file.ownerId !== profile.id);
@@ -1058,6 +1095,7 @@
 
   // Export and import, all generated locally in the browser.
   function downloadBlob(blob, filename) {
+    window.FloraDev?.log('info', `Download: ${filename} (${blob.size} bytes, ${blob.type})`, 'export');
     const url=URL.createObjectURL(blob);
     const anchor=document.createElement('a');anchor.href=url;anchor.download=filename;document.body.append(anchor);anchor.click();anchor.remove();
     setTimeout(()=>URL.revokeObjectURL(url),1500);

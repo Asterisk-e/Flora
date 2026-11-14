@@ -52,6 +52,12 @@
     lineEndings: [{ v: 'keep', label: 'Keep as written' }, { v: 'lf', label: 'LF', desc: 'Mac, Linux and the web.' }, { v: 'crlf', label: 'CRLF', desc: 'Windows and Notepad.' }],
     autosaveDelay: [{ v: 300, label: 'Quick (0.3 seconds)' }, { v: 450, label: 'Normal (0.45 seconds)' }, { v: 1500, label: 'Relaxed (1.5 seconds)' }, { v: 3000, label: 'Slow (3 seconds)' }],
     sortFiles: [{ v: 'recent', label: 'Recently edited' }, { v: 'name', label: 'Name' }, { v: 'size', label: 'Size, largest first' }, { v: 'type', label: 'Type' }],
+    devSmooth: [{ v: 'auto', label: 'Automatic' }, { v: 'antialiased', label: 'Grayscale', desc: 'Thinner, lighter letters on macOS and iOS.' }, { v: 'subpixel', label: 'Subpixel', desc: 'Uses coloured edges for sharper letters where supported.' }],
+    devRender: [{ v: 'auto', label: 'Automatic' }, { v: 'optimizeSpeed', label: 'Optimise speed', desc: 'Skips kerning and ligatures for faster drawing.' }, { v: 'optimizeLegibility', label: 'Optimise legibility', desc: 'Kerning and ligatures always on.' }, { v: 'geometricPrecision', label: 'Geometric precision', desc: 'Accurate sizes that scale smoothly.' }],
+    devStroke: [{ v: '0px', label: 'Off' }, { v: '0.15px', label: 'Light' }, { v: '0.3px', label: 'Medium' }, { v: '0.5px', label: 'Strong' }],
+    devDir: [{ v: 'auto', label: 'Follow the language' }, { v: 'ltr', label: 'Left to right' }, { v: 'rtl', label: 'Right to left', desc: 'Mirrors the whole interface. Useful for testing layouts.' }],
+    devLineHeight: [{ v: 0, label: 'Default' }, { v: 1.2, label: 'Tight (1.2)' }, { v: 1.4, label: 'Snug (1.4)' }, { v: 1.6, label: 'Relaxed (1.6)' }, { v: 1.8, label: 'Loose (1.8)' }, { v: 2.1, label: 'Very loose (2.1)' }],
+    devAnimScale: [{ v: 0, label: 'Animations off' }, { v: 0.5, label: 'Twice as fast (0.5×)' }, { v: 1, label: 'Normal (1×)' }, { v: 2, label: 'Slower (2×)' }, { v: 5, label: 'Much slower (5×)' }, { v: 10, label: 'Slow motion (10×)', desc: 'Handy for inspecting transitions.' }],
     backupReminderDays: [{ v: 0, label: 'Never' }, { v: 7, label: 'Every week' }, { v: 14, label: 'Every two weeks' }, { v: 30, label: 'Every month' }]
   };
   const optLabel = (key, value) => (OPT[key].find(o => String(o.v) === String(value)) || {}).label || String(value);
@@ -69,6 +75,7 @@
     { id: 'modes', icon: 'modes', title: 'Modes and presets', summary: () => P.byId(C.settings.modeId).name + (C.settings.examLock ? ' · exam lock on' : ''), rows: [{ t: 'custom', kw: 'school exam university work writer creative developer minimal easy reading preset junior secondary', render: () => modesHTML() }] },
     { id: 'appearance', icon: 'appearance', title: 'Appearance', summary: () => `${optLabel('theme', C.settings.theme)} · ${optLabel('fontFamily', C.settings.fontFamily)} · ${C.settings.textScale}%`, rows: [
       { t: 'custom', kw: 'preview', render: () => `<div class="appearance-preview"><div class="ap-card"><div class="ap-bar"><i></i><i></i><i></i></div><strong>Good to see you.</strong><span>This is how Flora looks with your choices.</span><button class="btn btn-primary btn-small" tabindex="-1">Primary</button></div></div>` },
+      { t: 'toggle', key: 'androidUI', title: 'Android 13 style interface', desc: 'Large titles, tinted rounded cards and pill buttons everywhere. Turn off for classic Flora.', kw: 'material you rounded classic prototype' },
       { t: 'choice', key: 'theme', title: 'Theme', kw: 'dark light paper night mode' },
       { t: 'swatch', key: 'accent', title: 'Accent colour', desc: 'Buttons, switches and highlights.', kw: 'color colour' },
       { t: 'choice', key: 'fontFamily', title: 'Font', kw: 'typeface serif sans mono' },
@@ -134,14 +141,47 @@
       { t: 'action', title: 'Reset settings', desc: 'Restore Flora’s defaults. Your files stay.', btn: 'Reset', run: () => { if (confirm('Restore every setting to its default? Your files are not touched.')) C.resetSettings(); } },
       { t: 'action', title: 'Clear all Flora data', desc: 'Remove every profile, file, task and preference from this browser.', btn: 'Clear…', danger: true, run: () => { const b = document.createElement('button'); b.dataset.action = 'clear-data'; document.body.append(b); b.click(); b.remove(); } }
     ] },
+    { id: 'developer', icon: 'encoding', title: 'Developer options', summary: () => (C.settings.devEnabled ? 'On' : 'Off'), after: root => window.FloraDev?.fillInfo(root), rows: [
+      { t: 'toggle', key: 'devEnabled', title: 'Use developer options', desc: 'Switches every option below on or off without losing your choices.', kw: 'developer debug' },
+      { t: 'heading', title: 'Text rendering', desc: 'Change how text is drawn across all of Flora. Saved on this device.' },
+      { t: 'custom', kw: 'text sample preview', render: () => '<div class="text-lab"><div class="text-lab-big">Sphinx of black quartz, judge my vow</div><div>fi fl ffi · AV To · 0123456789 · “quotes” … ½</div><div dir="auto">مرحبا بالعالم · שלום עולם</div></div>' },
+      { t: 'choice', key: 'devSmooth', title: 'Font smoothing', desc: 'How letter edges are anti-aliased.', kw: 'antialiasing text blur sharp' },
+      { t: 'choice', key: 'devRender', title: 'Text rendering mode', kw: 'legibility speed precision' },
+      { t: 'toggle', key: 'devLigatures', title: 'Ligatures', desc: 'Join letter pairs such as fi and fl.' },
+      { t: 'toggle', key: 'devKerning', title: 'Kerning', desc: 'Tighten spacing between specific letter pairs.' },
+      { t: 'toggle', key: 'devTabular', title: 'Tabular numbers', desc: 'Every digit the same width, so columns line up.' },
+      { t: 'choice', key: 'devStroke', title: 'Text weight boost', desc: 'Thickens letters with an outline of the same colour.', kw: 'bold stroke heavier' },
+      { t: 'range', key: 'devLetter', title: 'Letter spacing', min: -0.05, max: 0.2, step: 0.005, fmt: v => `${v > 0 ? '+' : ''}${Number(v).toFixed(3)} em` },
+      { t: 'range', key: 'devWord', title: 'Word spacing', min: 0, max: 0.5, step: 0.01, fmt: v => `${Number(v).toFixed(2)} em` },
+      { t: 'choice', key: 'devLineHeight', title: 'Line height', desc: 'Applies to body text and editors.' },
+      { t: 'choice', key: 'devDir', title: 'Text direction', kw: 'rtl ltr arabic hebrew mirror' },
+      { t: 'heading', title: 'Drawing', desc: 'Show how things are laid out.' },
+      { t: 'toggle', key: 'devBounds', title: 'Show layout bounds', desc: 'Outlines every element.' },
+      { t: 'toggle', key: 'devPointer', title: 'Pointer location', desc: 'Shows coordinates, input type and a ring that follows the pointer.', kw: 'touch taps' },
+      { t: 'toggle', key: 'devShowIds', title: 'Show file IDs', desc: 'Adds each file’s internal ID to its card in My files.' },
+      { t: 'heading', title: 'Monitoring' },
+      { t: 'toggle', key: 'devPerf', title: 'Performance monitor', desc: 'Frames per second, page elements, memory and stored bytes.', kw: 'fps memory heap' },
+      { t: 'choice', key: 'devAnimScale', title: 'Animation duration scale', desc: 'Slows or removes every animation.' },
+      { t: 'toggle', key: 'devStayAwake', title: 'Stay awake', desc: 'Keeps the screen on while Flora is open, where the browser allows it.', kw: 'wake lock screen' },
+      { t: 'heading', title: 'Debugging' },
+      { t: 'action', title: 'Debug log', desc: 'Navigation, exports, warnings and errors since Flora started.', btn: 'View', run: () => window.FloraDev?.showLog() },
+      { t: 'action', title: 'Inspect stored data', desc: 'See, copy, download and edit the raw JSON.', btn: 'Open', run: () => window.FloraDev?.showInspector() },
+      { t: 'action', title: 'Copy settings as JSON', btn: 'Copy', run: () => window.FloraDev?.copySettings() },
+      { t: 'custom', kw: 'build device info version browser service worker', render: () => '<h4 class="info-title">Build and device</h4><div id="dev-info" class="dev-info">Loading…</div>' },
+      { t: 'heading', title: 'Maintenance' },
+      { t: 'action', title: 'Clear offline cache and reload', desc: 'Unregisters the service worker and deletes cached files, then reloads. Your files stay.', btn: 'Clear', run: () => window.FloraDev?.clearCacheAndReload() },
+      { t: 'action', title: 'Reset developer options', desc: 'Restore every option above to its default.', btn: 'Reset', rerender: true, run: () => C.saveSettings({ ...window.FloraDev.defaults, devEnabled: C.settings.devEnabled }) },
+      { t: 'action', title: 'Turn off developer mode', desc: 'Hides this menu. Unlock it again from About › Build number.', btn: 'Turn off', danger: true, run: async () => { await C.saveSettings({ ...window.FloraDev.defaults, devUnlocked: false }); C.ui.settingsPage = 'home'; C.renderView(); } }
+    ] },
     { id: 'about', icon: 'info', title: 'About Flora', summary: () => 'Version 3.0', rows: [
+      { t: 'build' },
       { t: 'custom', render: () => `<div class="about-hero"><div class="splash-mark small">flora<span>.</span></div><small>Version 3.0 · offline-first creative workspace</small></div>` },
       { t: 'custom', kw: 'shortcuts keyboard', render: () => `<div class="shortcut-grid">${[['Ctrl K', 'Search everything'], ['Ctrl S', 'Save the open file'], ['Ctrl N', 'New document'], ['Ctrl ,', 'Open settings'], ['Esc', 'Close a dialog'], ['Ctrl /', 'Comment lines in Fern Code']].map(([k, d]) => `<div><span class="kbd">${k}</span><span>${d}</span></div>`).join('')}</div>` },
       { t: 'info', title: 'What’s new', desc: 'Setup that adapts to you, school and work modes, Android-style settings and storage, dark and paper themes, text encodings, five new applications and seven new tools.' }
     ] }
   ];
   const pageById = id => PAGES.find(p => p.id === id);
-  C.settingsIndex = () => PAGES.map(p => ({ id: p.id, title: p.title }));
+  C.settingsIndex = () => PAGES.filter(p => p.id !== 'developer' || C.settings.devUnlocked).map(p => ({ id: p.id, title: p.title }));
   C.openSettings = id => { C.ui.settingsPage = id || 'home'; C.setActiveView('settings', null, { keepPage: true }); };
 
   /* ---------------------------------------------------------------- custom blocks */
@@ -160,6 +200,7 @@
   function rowHTML(page, row, i) {
     const s = C.settings, id = `${page.id}:${i}`, base = `data-row="${id}"`;
     if (row.t === 'custom') return `<div class="android-custom" ${base}>${row.render()}</div>`;
+    if (row.t === 'build') return `<button class="android-row" ${base} data-build><div class="android-row-body"><strong>Build number</strong><small>Flora 3.0 · static build${s.devUnlocked ? ' · developer mode is on' : ''}</small></div></button>`;
     if (row.t === 'info') return `<div class="android-row static info" ${base}><div class="android-row-body"><strong>${esc(row.title)}</strong><small>${esc(row.desc || '')}</small></div></div>`;
     if (row.t === 'action') return `<div class="android-row static" ${base}><div class="android-row-body"><strong>${esc(row.title)}</strong>${row.desc ? `<small>${esc(row.desc)}</small>` : ''}</div><button class="btn ${row.danger ? 'btn-danger' : 'btn-secondary'} btn-small" data-action-row="${id}">${esc(row.btn)}</button></div>`;
     if (row.t === 'toggle') return `<div class="android-row" ${base} data-key="${row.key}" role="button" tabindex="0" data-toggle="${row.key}"><div class="android-row-body"><strong>${esc(row.title)}</strong>${row.desc ? `<small>${esc(row.desc)}</small>` : ''}</div><span class="a-switch" role="switch" aria-checked="${!!s[row.key]}" aria-label="${esc(row.title)}"><i></i></span></div>`;
@@ -168,7 +209,16 @@
     if (row.t === 'swatch') return `<div class="android-row static swatches-row" ${base} data-key="${row.key}"><div class="android-row-body"><strong>${esc(row.title)}</strong><small>${esc(row.desc || '')}</small><div class="swatches a-swatches">${ACCENTS.map(c => `<button class="swatch ${String(s.accent).toLowerCase() === c ? 'active' : ''}" style="background:${c}" data-accent="${c}" aria-label="Accent ${c}"></button>`).join('')}<label class="swatch custom ${ACCENTS.includes(String(s.accent).toLowerCase()) ? '' : 'active'}" title="Custom colour"><input type="color" value="${esc(s.accent)}" data-accent-custom aria-label="Custom accent colour"></label></div></div></div>`;
     return '';
   }
-  function pageHTML(page) { return `<div class="android-group">${page.rows.map((row, i) => rowHTML(page, row, i)).join('')}</div>`; }
+  function pageHTML(page) {
+    let html = '', group = [];
+    const flush = () => { if (group.length) html += `<div class="android-group">${group.join('')}</div>`; group = []; };
+    page.rows.forEach((row, i) => {
+      if (row.t === 'heading') { flush(); html += `<h2 class="android-section">${esc(row.title)}${row.desc ? `<small>${esc(row.desc)}</small>` : ''}</h2>`; return; }
+      group.push(rowHTML(page, row, i));
+    });
+    flush();
+    return page.id === 'developer' ? `<div class="dev-body ${C.settings.devEnabled ? '' : 'dev-off'}" id="dev-body">${html}</div>` : html;
+  }
   function syncRows(root) {
     const s = C.settings;
     PAGES.forEach(page => page.rows.forEach((row, i) => {
@@ -179,7 +229,7 @@
       if (row.t === 'swatch') { $$('.swatch', el).forEach(b => b.classList.toggle('active', b.dataset.accent === String(s.accent).toLowerCase())); const custom = $('.swatch.custom', el); if (custom) { custom.classList.toggle('active', !ACCENTS.includes(String(s.accent).toLowerCase())); $('input', custom).value = s.accent; } }
       if (row.t === 'custom' && /preview/i.test(row.kw || '') && row.render().includes('enc-preview')) el.innerHTML = row.render();
     }));
-    const h = $('.android-sub-summary', root); if (h) h.textContent = '';
+    const devBody = $('#dev-body', root); if (devBody) devBody.classList.toggle('dev-off', !s.devEnabled);
   }
 
   /* ---------------------------------------------------------------- chooser dialog (radio list) */
@@ -228,7 +278,7 @@
         <label class="android-search"><span>${icon('search', 20)}</span><input id="set-search" type="search" placeholder="Search settings" value="${esc(query)}" autocomplete="off" aria-label="Search settings"></label>
         <button class="profile-card" data-set-open="profile"><span class="avatar big" style="--avatar-color:${esc(C.profile.color)}">${esc(C.profile.name.slice(0, 1).toUpperCase())}</span><span class="profile-card-copy"><strong>${esc(C.profile.name)}</strong><small>${esc(P.byId(s.modeId).name)} mode · Local profile</small></span>${icon('chevron', 20)}</button>
         <div id="set-results" class="android-group" hidden></div>
-        <div id="set-groups" class="android-group list">${[...PAGES.slice(1, 5), 'storage', ...PAGES.slice(5)].map(p => p === 'storage'
+        <div id="set-groups" class="android-group list">${[...PAGES.slice(1, 5), 'storage', ...PAGES.slice(5)].filter(p => p === 'storage' || p.id !== 'developer' || C.settings.devUnlocked).map(p => p === 'storage'
           ? `<button class="android-row nav" data-set-storage>${icon('storage')}<div class="android-row-body"><strong>Storage</strong><small>${esc(C.formatBytes(storage))} used of ${esc(C.formatBytes(s.storageLimitBytes))}</small></div></button>`
           : `<button class="android-row nav" data-set-open="${p.id}">${icon(p.icon)}<div class="android-row-body"><strong>${esc(p.title)}</strong><small>${esc(p.summary())}</small></div></button>`).join('')}</div></div>`;
       if (query) runSearch(root);
@@ -236,6 +286,7 @@
       const p = pageById(page) || pageById('modes');
       root.innerHTML = `<div class="android-screen ${dirClass}"><button class="round-back" data-set-back aria-label="Back">${icon('back')}</button><h1 class="android-title">${esc(p.title)}</h1>${pageHTML(p)}</div>`;
       if (p.id === 'privacy') persistStatus(root);
+      p.after?.(root);
     }
   }
   async function persistStatus(root) {
@@ -248,17 +299,23 @@
     const q = query.trim().toLowerCase(), box = $('#set-results', root), groups = $('#set-groups', root); if (!box) return;
     if (!q) { box.hidden = true; groups.hidden = false; return; }
     const hits = [];
-    PAGES.forEach(page => page.rows.forEach((row, i) => {
+    PAGES.filter(page => page.id !== 'developer' || C.settings.devUnlocked).forEach(page => page.rows.forEach((row, i) => {
       const text = `${row.title || ''} ${row.desc || ''} ${row.kw || ''} ${page.title}`.toLowerCase();
       if ((row.title || row.kw) && q.split(/\s+/).every(w => text.includes(w))) hits.push({ page, row, i });
     }));
-    PAGES.forEach(page => { if (page.title.toLowerCase().includes(q) && !hits.some(h => h.page === page)) hits.push({ page, row: { title: page.title, desc: 'Open this section' }, i: -1 }); });
+    PAGES.filter(page => page.id !== 'developer' || C.settings.devUnlocked).forEach(page => { if (page.title.toLowerCase().includes(q) && !hits.some(h => h.page === page)) hits.push({ page, row: { title: page.title, desc: 'Open this section' }, i: -1 }); });
     groups.hidden = true; box.hidden = false;
     box.innerHTML = hits.length ? hits.slice(0, 14).map(h => `<button class="android-row nav" data-hit="${h.page.id}:${h.i}">${icon(h.page.icon)}<div class="android-row-body"><strong>${esc(h.row.title || h.page.title)}</strong><small>${esc(h.page.title)}${h.row.desc ? ' · ' + esc(h.row.desc.slice(0, 70)) : ''}</small></div></button>`).join('') : `<div class="android-row static info"><div class="android-row-body"><strong>No settings found</strong><small>Try a different word, like “dark”, “text” or “storage”.</small></div></div>`;
   }
   function go(root, page, dir) { C.ui.settingsPage = page; query = ''; render(root, { dir }); window.scrollTo(0, 0); }
   function flash(root, key) { const el = $(`[data-row="${key}"]`, root); if (!el) return; el.scrollIntoView({ block: 'center', behavior: C.animOff() ? 'auto' : 'smooth' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1800); }
-  let rangeTimer = null;
+  let rangeTimer = null, buildTaps = 0, buildReset = null;
+  async function buildTap(root) {
+    if (C.settings.devUnlocked) { C.toast('No need, you are already a developer.'); return; }
+    buildTaps++; clearTimeout(buildReset); buildReset = setTimeout(() => { buildTaps = 0; }, 4000);
+    if (buildTaps >= 7) { buildTaps = 0; await C.saveSettings({ devUnlocked: true, devEnabled: true }); C.toast('You are now a developer!', 'success'); render(root); }
+    else if (buildTaps >= 3) C.toast(`You are ${7 - buildTaps} step${7 - buildTaps === 1 ? '' : 's'} away from being a developer.`);
+  }
 
   C.registerView('settings', {
     crumb: () => ['Workspace', C.ui.settingsPage === 'home' ? 'Settings' : (pageById(C.ui.settingsPage)?.title || 'Settings')],
@@ -273,7 +330,8 @@
           const tog = e.target.closest('[data-toggle]'); if (tog) { const key = tog.dataset.toggle; await C.saveSettings({ [key]: !C.settings[key] }); syncRows(root); if (key === 'compactMode' || key === 'reduceMotion') syncRows(root); return; }
           const ch = e.target.closest('[data-choice]'); if (ch) { const key = ch.dataset.choice, row = PAGES.flatMap(p => p.rows).find(r => r.key === key); showChooser({ title: row.title, options: OPT[key], value: C.settings[key], onPick: async v => { const typed = typeof OPT[key][0].v === 'number' ? Number(v) : v; await C.saveSettings({ [key]: typed }); syncRows(root); if (key === 'animLevel') C.playViewEnter(); } }); return; }
           const sw = e.target.closest('[data-accent]'); if (sw) { await C.saveSettings({ accent: sw.dataset.accent }); syncRows(root); return; }
-          const rowAct = e.target.closest('[data-action-row]'); if (rowAct) { const [pid, idx] = rowAct.dataset.actionRow.split(':'); pageById(pid).rows[Number(idx)].run(); return; }
+          const build = e.target.closest('[data-build]'); if (build) { buildTap(root); return; }
+          const rowAct = e.target.closest('[data-action-row]'); if (rowAct) { const [pid, idx] = rowAct.dataset.actionRow.split(':'), row = pageById(pid).rows[Number(idx)]; await row.run(); if (row.rerender) render(root); return; }
           const mode = e.target.closest('[data-mode]'); if (mode) { chooseMode(mode.dataset.mode); return; }
           const act = e.target.closest('[data-act]'); if (act) {
             if (act.dataset.act === 'undo-mode') { await C.undoMode(); render(root); }

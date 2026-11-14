@@ -1,0 +1,211 @@
+/* =========================================================================
+   Android 13 interface layer. Active while <body class="android-ui"> (Settings › Appearance).
+   Same cues as the Settings and Storage screens: a tinted canvas, big serif titles, rounded tonal cards,
+   pill buttons and inputs, grouped lists with tight gaps, an ink-coloured primary. Turn it off for classic Flora.
+   ========================================================================= */
+
+/* ---- canvas and shell ---------------------------------------------------- */
+body.android-ui .main-area { background: var(--tint); }
+body.android-ui .topbar { background: transparent; border-bottom: 0; backdrop-filter: none; box-shadow: none; }
+body.android-ui .sidebar { background: var(--tint); border-right: 0; box-shadow: none; }
+body.android-ui .view-root { max-width: 1180px; }
+
+/* sidebar: tonal pill for the active destination, no divider bars */
+body.android-ui .nav-label { color: var(--accent-strong); letter-spacing: .08em; }
+body.android-ui .nav-item { border-radius: 999px; min-height: 46px; border: 0; background: transparent; transition: background .18s; }
+body.android-ui .nav-item:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+body.android-ui .nav-item.active { background: color-mix(in srgb, var(--accent) 42%, var(--surface)); color: var(--ink); box-shadow: none; font-weight: 700; }
+body.android-ui .more-apps summary { border-radius: 999px; }
+body.android-ui .nav-count { background: color-mix(in srgb, var(--accent) 26%, var(--surface)); border: 0; border-radius: 999px; }
+body.android-ui .profile-switcher, body.android-ui .storage-mini { background: var(--tint-card-2); border: 0; border-radius: 26px; box-shadow: none; }
+body.android-ui .storage-mini.active, body.android-ui .storage-mini:hover { background: color-mix(in srgb, var(--accent) 24%, var(--surface)); }
+body.android-ui .progress-track { height: 8px; border-radius: 8px; background: var(--tint-track); }
+body.android-ui #storage-progress { background: var(--ink); border-radius: 8px; }
+body.android-ui .sidebar-compact-toggle, body.android-ui .mode-chip, body.android-ui .help-button { background: var(--tint-card-2); border: 0; border-radius: 999px; box-shadow: none; }
+body.android-ui .mode-chip:hover, body.android-ui .help-button:hover, body.android-ui .sidebar-compact-toggle:hover { background: color-mix(in srgb, var(--accent) 28%, var(--surface)); }
+body.android-ui .mode-chip.is-exam { background: var(--ink); color: var(--surface); }
+body.android-ui .online-status { background: transparent; border: 0; }
+body.android-ui .top-profile .avatar, body.android-ui .profile-switcher .avatar { box-shadow: none; }
+body.android-ui .breadcrumb strong { font-weight: 700; }
+
+/* ---- titles --------------------------------------------------------------- */
+body.android-ui .page-kicker { display: none; }
+body.android-ui .page-title { font: 400 44px/1.1 Newsreader, Georgia, serif; letter-spacing: -.015em; margin-bottom: 10px; }
+body.android-ui .page-subtitle { font: 15px/1.65 Arial, sans-serif; color: var(--muted); max-width: 640px; }
+body.android-ui .section-heading h2 { font: 400 24px/1.2 Newsreader, Georgia, serif; }
+body.android-ui .section-heading p { font: 13px Arial, sans-serif; }
+body.android-ui .text-link { color: var(--accent-strong); font-weight: 700; }
+body.android-ui .home-intro, body.android-ui .welcome-row { margin-bottom: 22px; }
+
+/* ---- buttons: ink primary, tonal secondary, quiet ghost ------------------- */
+body.android-ui .btn { border: 0; border-radius: 999px; min-height: 42px; padding: 0 22px; font-weight: 700; box-shadow: none; transition: background .18s, transform .12s, filter .15s; }
+body.android-ui .btn:active { transform: scale(.97); }
+body.android-ui .btn-small { min-height: 34px; padding: 0 16px; }
+body.android-ui .btn-primary { background: var(--ink); color: var(--surface); }
+body.android-ui .btn-primary:hover { filter: none; background: color-mix(in srgb, var(--ink) 86%, var(--accent)); }
+body.android-ui .btn-secondary { background: var(--tint-card-2); color: var(--ink); }
+body.android-ui .btn-secondary:hover { background: color-mix(in srgb, var(--accent) 30%, var(--surface)); }
+body.android-ui .btn-ghost { background: transparent; color: var(--ink); }
+body.android-ui .btn-ghost:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+body.android-ui .btn-danger { background: color-mix(in srgb, #c0504d 18%, var(--surface)); color: #a23d38; }
+body.android-ui .btn:disabled { opacity: .45; }
+body.android-ui .choice-chip { border: 0; background: var(--tint-card-2); }
+body.android-ui .choice-chip:hover { background: color-mix(in srgb, var(--accent) 30%, var(--surface)); }
+body.android-ui .choice-chip.active { background: var(--ink); color: var(--surface); }
+body.android-ui .seg { border: 0; background: var(--tint-card-2); }
+body.android-ui .tag { border: 0; border-radius: 999px; background: color-mix(in srgb, var(--accent) 26%, var(--surface)); color: var(--ink); }
+
+/* ---- inputs ---------------------------------------------------------------- */
+body.android-ui .text-input, body.android-ui .select-control, body.android-ui .text-area,
+body.android-ui .form-field input, body.android-ui .form-field select, body.android-ui .form-field textarea { background: var(--tint-card-2); border: 0; border-radius: 16px; min-height: 46px; box-shadow: none; color: var(--ink); }
+body.android-ui .text-area { border-radius: 22px; padding: 14px 16px; }
+body.android-ui .search-field input { background: var(--tint-card-2); border: 0; border-radius: 999px; min-height: 52px; box-shadow: none; }
+body.android-ui .search-field input:focus, body.android-ui .text-input:focus, body.android-ui .select-control:focus, body.android-ui .text-area:focus { box-shadow: 0 0 0 2px var(--accent-strong); }
+
+/* ---- cards: tinted, borderless, very round -------------------------------- */
+body.android-ui .stat-card, body.android-ui .panel, body.android-ui .app-card, body.android-ui .tool-tile, body.android-ui .today-card,
+body.android-ui .file-card, body.android-ui .tool-note, body.android-ui .tool-card, body.android-ui .calc-card, body.android-ui .focus-card,
+body.android-ui .cd-card, body.android-ui .journal-page, body.android-ui .card-row, body.android-ui .k-card { background: var(--tint-card); border: 0; box-shadow: none; }
+body.android-ui .stat-card, body.android-ui .panel, body.android-ui .tool-note, body.android-ui .calc-card, body.android-ui .focus-card, body.android-ui .journal-page { border-radius: 28px; }
+body.android-ui .app-card, body.android-ui .tool-tile, body.android-ui .today-card, body.android-ui .file-card, body.android-ui .cd-card, body.android-ui .tool-card { border-radius: 26px; }
+body.android-ui .app-card:hover, body.android-ui .tool-tile:hover, body.android-ui .today-card:hover, body.android-ui .file-card:hover, body.android-ui .tool-card:hover { background: color-mix(in srgb, var(--accent) 16%, var(--surface)); border: 0; transform: none; box-shadow: none; }
+html[data-anim=full] body.android-ui .app-card:hover, html[data-anim=full] body.android-ui .tool-tile:hover, html[data-anim=full] body.android-ui .today-card:hover { transform: translateY(-2px); }
+body.android-ui .mode-banner { background: var(--tint-card-2); border: 0; border-radius: 26px; }
+body.android-ui .mode-banner.exam { background: var(--ink); }
+body.android-ui .empty-state { background: transparent; border: 0; }
+body.android-ui .stat-value { font-family: Newsreader, Georgia, serif; font-weight: 400; }
+
+/* Home hero: one calm tonal block, no decorative rings */
+body.android-ui .home-hero { background: var(--tint-card-2); border: 0; border-radius: 32px; box-shadow: none; }
+body.android-ui .home-hero::before, body.android-ui .home-hero::after { display: none; }
+body.android-ui .hero-side-note { border-left-color: color-mix(in srgb, var(--ink) 18%, transparent); }
+body.android-ui .hero-eyebrow { color: var(--accent-strong); }
+
+/* app cards get a coloured circle, like app icons */
+body.android-ui .app-card { align-content: start; gap: 4px; }
+body.android-ui .app-card::before { content: ''; position: static; display: block; width: 44px; height: 44px; border-radius: 50%; margin-bottom: 10px; background: color-mix(in srgb, var(--card-line, var(--accent)) 62%, var(--surface)); }
+body.android-ui .app-card-kicker { color: var(--accent-strong); font-weight: 700; }
+body.android-ui .card-open-label { color: var(--accent-strong); }
+body.android-ui .tool-tile-kicker { color: var(--accent-strong); font-weight: 700; }
+body.android-ui .pin-toggle { border: 0; background: var(--tint-card-2); }
+body.android-ui .pin-toggle.on { background: var(--ink); color: var(--surface); }
+
+/* ---- lists: grouped rows with 2px gaps and rounded ends -------------------- */
+body.android-ui .recent-list { display: grid; gap: 2px; background: transparent; border: 0; padding: 0; box-shadow: none; }
+body.android-ui .file-row { background: var(--tint-card); border: 0; border-radius: 6px; padding: 14px 20px; box-shadow: none; transition: background .15s; }
+body.android-ui .file-row:hover { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
+body.android-ui .recent-list > .file-row:first-child { border-top-left-radius: 26px; border-top-right-radius: 26px; }
+body.android-ui .recent-list > .file-row:last-child { border-bottom-left-radius: 26px; border-bottom-right-radius: 26px; }
+body.android-ui .recent-list > .file-row:only-child { border-radius: 26px; }
+body.android-ui .file-type-label { border: 0; border-radius: 999px; background: color-mix(in srgb, var(--accent) 30%, var(--surface)); color: var(--ink); font-weight: 700; }
+body.android-ui .file-row-copy strong { font: 400 18px Newsreader, Georgia, serif; }
+body.android-ui .file-row-actions button { border: 0; background: transparent; border-radius: 999px; padding: 8px 14px; color: var(--ink); font-weight: 700; }
+body.android-ui .file-row-actions button:hover { background: color-mix(in srgb, var(--accent) 26%, transparent); }
+body.android-ui .file-card-title { font-family: Newsreader, Georgia, serif; font-weight: 400; }
+body.android-ui .file-card-head .btn { border-radius: 999px; }
+
+/* ---- dialogs, menus, toasts ------------------------------------------------ */
+body.android-ui .modal-backdrop { background: rgba(30, 26, 16, .42); backdrop-filter: blur(2px); }
+body.android-ui .modal-card { background: var(--tint-card-2); border: 0; border-radius: 30px; box-shadow: 0 24px 80px rgba(30, 26, 16, .3); }
+body.android-ui .modal-card h2 { font: 400 28px/1.15 Newsreader, Georgia, serif; }
+body.android-ui .import-drop { background: var(--tint-card); border: 2px dashed color-mix(in srgb, var(--accent) 60%, var(--line)); border-radius: 24px; }
+body.android-ui .toast, body.android-ui .toast.success { background: var(--ink); color: var(--surface); border: 0; border-radius: 16px; box-shadow: 0 8px 28px rgba(0, 0, 0, .25); }
+body.android-ui .toast.error { background: #b04a3c; color: #fff; }
+body.android-ui .palette-card { background: var(--tint-card-2); border: 0; border-radius: 30px; }
+body.android-ui .palette-input { border-bottom: 0; background: var(--tint-card); margin: 12px; width: calc(100% - 24px); border-radius: 999px; font-size: 17px; }
+body.android-ui .palette-item { border-radius: 16px; }
+body.android-ui .palette-foot { background: transparent; border-top: 0; }
+
+/* ---- editors: calm header, tonal toolbar, rounded workspace ---------------- */
+body.android-ui .editor-document-header { background: transparent; border: 0; box-shadow: none; padding-left: 4px; padding-right: 4px; }
+body.android-ui .editor-title-input { font: 400 30px Newsreader, Georgia, serif; background: transparent; border: 0; border-radius: 14px; }
+body.android-ui .editor-title-input:focus { background: var(--tint-card-2); box-shadow: none; }
+body.android-ui .editor-back { background: var(--tint-card-2); border: 0; border-radius: 999px; padding: 8px 16px; font-weight: 700; color: var(--ink); }
+body.android-ui .editor-back:hover { background: color-mix(in srgb, var(--accent) 28%, var(--surface)); }
+body.android-ui .editor-file-meta { color: var(--muted); }
+body.android-ui .save-indicator { background: transparent; }
+body.android-ui .app-workspace { background: var(--tint-card); border: 0; border-radius: 30px; box-shadow: none; overflow: hidden; }
+body.android-ui .app-workspace .editor-toolbar { background: var(--tint-card-2); border: 0; border-radius: 22px; margin: 10px 10px 0; padding: 8px 12px; box-shadow: none; }
+body.android-ui .tool-button, body.android-ui .editor-select, body.android-ui .editor-toolbar select { border: 0; border-radius: 999px; background: transparent; color: var(--ink); }
+body.android-ui .tool-button:hover, body.android-ui .editor-select:hover { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+body.android-ui .tool-button.active { background: var(--ink); color: var(--surface); }
+body.android-ui .editor-select, body.android-ui .editor-toolbar select { background: color-mix(in srgb, var(--surface) 60%, transparent); padding-inline: 12px; }
+body.android-ui .collab-dock { background: var(--tint-card); border: 0; border-radius: 26px; box-shadow: none; }
+body.android-ui .collab-user { border: 0; background: var(--tint-card-2); border-radius: 999px; }
+body.android-ui .code-shell { border: 0; border-radius: 22px; margin: 10px; }
+body.android-ui .sketch-stage { border: 0; border-radius: 24px; margin: 10px; }
+body.android-ui .k-col { background: var(--tint-card-2); border: 0; border-radius: 26px; }
+body.android-ui .k-card { background: var(--surface); border-radius: 18px; }
+body.android-ui .card-row { background: var(--tint-card-2); border-radius: 22px; }
+body.android-ui .card-row textarea, body.android-ui .j-head input[type=date] { background: var(--surface); border: 0; border-radius: 14px; }
+body.android-ui .j-item { background: var(--tint-card-2); border: 0; border-radius: 18px; }
+body.android-ui .j-item.active { background: color-mix(in srgb, var(--accent) 42%, var(--surface)); }
+body.android-ui .journal-page { background: var(--tint-card-2); }
+body.android-ui .flash-face { border: 0; background: var(--tint-card-2); border-radius: 32px; box-shadow: none; }
+body.android-ui .flash-face.back { background: color-mix(in srgb, var(--accent) 38%, var(--surface)); }
+body.android-ui .tt-scroll { border: 0; border-radius: 26px; background: var(--tint-card); }
+body.android-ui .tt-cell.filled { border-radius: 12px; }
+body.android-ui .calc-input, body.android-ui .calc-key { border-radius: 24px; }
+body.android-ui .calc-key.eq { background: var(--ink); }
+body.android-ui .calc-card, body.android-ui .focus-card { background: var(--tint-card-2); }
+body.android-ui .unit-result { background: color-mix(in srgb, var(--accent) 30%, var(--surface)); border-radius: 22px; }
+body.android-ui .grade-need, body.android-ui .enc-live, body.android-ui .hexdump, body.android-ui .ws-stat, body.android-ui .char-chip, body.android-ui .cd-clock span { background: var(--tint-card-2); border-radius: 18px; }
+body.android-ui .enc-row.active { background: color-mix(in srgb, var(--accent) 34%, var(--surface)); border-color: transparent; border-radius: 20px; }
+body.android-ui .focus-controls .btn.is-on { background: var(--ink); color: var(--surface); }
+
+/* ---- documents, sheets, slides keep their pages; only the surrounding chrome changes ---- */
+body.android-ui .document-ribbon, body.android-ui .ribbon, body.android-ui .doc-toolbar, body.android-ui .format-bar { background: var(--tint-card-2); border: 0; border-radius: 22px; }
+
+/* ---- tasks and amethyst reuse panels/inputs above ------------------------- */
+body.android-ui .task-row, body.android-ui .task-item { background: var(--tint-card); border: 0; border-radius: 18px; }
+
+/* ---- phones: a rounded drawer, and a bit less padding ---------------------- */
+@media (max-width: 900px) {
+  body.android-ui .sidebar { border-radius: 0 30px 30px 0; background: var(--tint-card-2); box-shadow: 0 0 60px rgba(0, 0, 0, .25); }
+  body.android-ui .page-title { font-size: 36px; }
+  body.android-ui .mobile-menu { background: var(--tint-card-2); border: 0; border-radius: 999px; }
+}
+body.android-ui.high-contrast .btn-secondary, body.android-ui.high-contrast .file-row, body.android-ui.high-contrast .panel { outline: 2px solid var(--ink); }
+
+/* =========================================================================
+   Android home screen: At a glance, search pill, widgets, launcher grid, dock, floating action button
+   ========================================================================= */
+.glance { padding: 16px 6px 4px; }
+.glance-greet { font: 700 14px Arial, sans-serif; color: var(--accent-strong); letter-spacing: .02em; }
+.glance-date { font: 400 clamp(40px, 6vw, 66px)/1.04 Newsreader, Georgia, serif; letter-spacing: -.02em; margin: 6px 0 18px; color: var(--ink); }
+.glance-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.glance-chip { border: 0; border-radius: 999px; padding: 10px 17px; background: var(--tint-card-2); color: var(--ink); font: 700 12px Arial, sans-serif; cursor: default; }
+button.glance-chip { cursor: pointer; transition: background .15s; }
+button.glance-chip:hover { background: color-mix(in srgb, var(--accent) 30%, var(--surface)); }
+.home-search { display: flex; align-items: center; gap: 14px; width: 100%; height: 60px; border: 0; border-radius: 999px; background: var(--tint-card-2); color: var(--muted); padding: 0 24px; margin: 20px 0 22px; font: 400 18px Newsreader, Georgia, serif; cursor: pointer; text-align: left; box-shadow: 0 1px 3px rgba(30, 26, 16, .08); transition: box-shadow .2s, background .2s; }
+.home-search > span:nth-child(2) { flex: 1; }
+.home-search:hover { background: color-mix(in srgb, var(--accent) 20%, var(--surface)); box-shadow: 0 6px 18px rgba(30, 26, 16, .12); }
+.widgets { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.widgets .today-card { padding: 20px 24px; border-radius: 30px; background: var(--tint-card-2); }
+.widgets .today-card strong { font-size: 26px; line-height: 1.15; }
+.widgets .today-kicker { color: var(--accent-strong); font-weight: 700; }
+.home-section { margin: 26px 6px 12px; }
+.launcher { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 18px 8px; }
+.launcher-item { display: grid; justify-items: center; align-content: start; gap: 9px; border: 0; background: transparent; color: var(--ink); cursor: pointer; padding: 8px 4px 6px; border-radius: 24px; font: inherit; transition: background .15s, transform .2s var(--ease-out); }
+.launcher-item:hover { background: color-mix(in srgb, var(--accent) 13%, transparent); }
+.launcher-item:active { transform: scale(.94); }
+.launcher-icon { width: 66px; height: 66px; border-radius: 50%; display: grid; place-items: center; font: 500 22px Newsreader, Georgia, serif; background: color-mix(in srgb, var(--c) 58%, var(--surface)); color: var(--ink); transition: border-radius .28s var(--ease-out); }
+.launcher-item:hover .launcher-icon, .launcher-item:focus-visible .launcher-icon { border-radius: 26px; }
+.launcher-label { font: 600 12px/1.3 Arial, sans-serif; text-align: center; max-width: 94px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.dock { display: flex; gap: 4px; justify-content: space-around; background: var(--tint-card-2); border-radius: 36px; padding: 12px 14px; margin: 28px 0 4px; }
+.dock-item { flex: 1; display: grid; justify-items: center; gap: 7px; border: 0; background: transparent; color: var(--ink); font: 700 11px Arial, sans-serif; cursor: pointer; padding: 6px 8px; border-radius: 24px; transition: background .15s, transform .15s; }
+.dock-item:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.dock-item:active { transform: scale(.95); }
+.dock-icon { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 36%, var(--surface)); transition: border-radius .25s var(--ease-out); }
+.dock-item:hover .dock-icon { border-radius: 20px; }
+.fab-wrap { position: sticky; bottom: 24px; display: flex; justify-content: flex-end; pointer-events: none; margin-top: 14px; z-index: 5; }
+.fab { pointer-events: auto; display: inline-flex; align-items: center; gap: 12px; height: 60px; padding: 0 26px 0 20px; border: 0; border-radius: 20px; background: color-mix(in srgb, var(--accent) 58%, var(--surface)); color: var(--ink); font: 700 15px Arial, sans-serif; cursor: pointer; box-shadow: 0 8px 24px rgba(30, 26, 16, .22); transition: transform .2s var(--ease-out), box-shadow .2s, border-radius .25s; position: relative; overflow: hidden; }
+.fab:hover { box-shadow: 0 12px 30px rgba(30, 26, 16, .28); border-radius: 26px; }
+.fab:active { transform: scale(.96); }
+@media (max-width: 640px) { .launcher { grid-template-columns: repeat(4, 1fr); } .launcher-icon { width: 58px; height: 58px; } .dock { border-radius: 30px; padding: 10px 6px; } .dock-icon { width: 48px; height: 48px; } .glance-date { font-size: 42px; } }
+
+/* ---- finishing touches ----------------------------------------------------- */
+body.android-ui .search-field:before { top: 50%; left: 20px; transform: translateY(-52%); z-index: 1; font-size: 22px; pointer-events: none; }
+body.android-ui .search-field input { padding-left: 48px; font-size: 14px; }
+body.android-ui .focus-card .btn-secondary, body.android-ui .calc-card .btn-secondary, body.android-ui .panel .btn-secondary { background: color-mix(in srgb, var(--accent) 28%, var(--surface)); }
+body.android-ui .focus-card .btn-secondary:hover, body.android-ui .panel .btn-secondary:hover { background: color-mix(in srgb, var(--accent) 42%, var(--surface)); }

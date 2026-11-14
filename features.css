@@ -620,3 +620,40 @@ body.high-contrast .btn, body.high-contrast .choice-chip, body.high-contrast .mo
   .topbar-actions { gap: 6px; } .help-button { padding-inline: 10px; }
   .android-row-body strong { font-size: 17px; } .sr-line strong { font-size: 21px; }
 }
+
+/* =========================================================================
+   Developer options
+   ========================================================================= */
+html[data-dev-smooth=antialiased] body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+html[data-dev-smooth=subpixel] body { -webkit-font-smoothing: subpixel-antialiased; }
+html[data-dev-render] body { text-rendering: var(--dev-render); }
+html[data-dev-liga=off] body { font-variant-ligatures: none; }
+html[data-dev-kern=off] body { font-kerning: none; }
+html[data-dev-num=tabular] body { font-variant-numeric: tabular-nums; }
+html[data-dev-stroke] body { -webkit-text-stroke: var(--dev-stroke) currentColor; }
+html[data-dev-ls] body, html[data-dev-ls] .document-editor, html[data-dev-ls] .note-editor, html[data-dev-ls] .journal-text { letter-spacing: var(--dev-ls); }
+html[data-dev-ws] body, html[data-dev-ws] .document-editor, html[data-dev-ws] .note-editor, html[data-dev-ws] .journal-text { word-spacing: var(--dev-ws); }
+html[data-dev-lh] body, html[data-dev-lh] .document-editor, html[data-dev-lh] .note-editor, html[data-dev-lh] .journal-text, html[data-dev-lh] .code-area, html[data-dev-lh] .android-row-body small { line-height: var(--dev-lh); }
+body.dev-bounds *:not(#dev-perf):not(#dev-pointer):not(#dev-pointer *) { outline: 1px solid rgba(214, 69, 65, .5) !important; outline-offset: -1px; }
+.dev-off .android-row:not([data-key=devEnabled]), .dev-off .android-custom, .dev-off .android-section { opacity: .42; pointer-events: none; }
+.text-lab { display: grid; gap: 8px; font: 400 18px/1.5 Newsreader, Georgia, serif; }
+.text-lab-big { font-size: 30px; line-height: 1.2; }
+.info-title { font: 700 10px Arial, sans-serif; letter-spacing: .1em; text-transform: uppercase; color: var(--accent-strong); margin: 0 0 10px; }
+.dev-info { display: grid; }
+.info-line { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; padding: 8px 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 9%, transparent); font: 12px/1.5 Arial, sans-serif; }
+.info-line span { color: var(--muted); } .info-line strong { font-weight: 500; word-break: break-word; }
+.dev-sheet { width: min(800px, 100%); }
+.dev-bar { display: flex; gap: 8px; align-items: center; padding: 0 20px; margin-bottom: 10px; flex-wrap: wrap; }
+.log-list { max-height: 46vh; overflow: auto; margin: 0 12px; font: 11.5px/1.5 ui-monospace, Menlo, Consolas, monospace; }
+.log-line time { white-space: nowrap; }
+.log-line { display: grid; grid-template-columns: 92px 46px minmax(0, 1fr) auto; gap: 10px; padding: 7px 10px; white-space: normal; border-radius: 10px; align-items: start; }
+.log-line:nth-child(odd) { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.log-line b { text-transform: uppercase; font-size: 9px; letter-spacing: .06em; padding-top: 2px; }
+.log-line.error b { color: #b04a3c; } .log-line.warn b { color: #a6731f; } .log-line span { word-break: break-word; } .log-line small { color: var(--muted); }
+.insp-text { display: block; width: calc(100% - 40px); margin: 0 20px; min-height: 300px; box-sizing: border-box; resize: vertical; border: 0; color: var(--ink); }
+#dev-perf { position: fixed; left: 12px; bottom: 12px; z-index: 700; background: rgba(20, 20, 22, .9); color: #9df0a8; font: 600 11px ui-monospace, Menlo, Consolas, monospace; padding: 8px 12px; border-radius: 12px; pointer-events: none; }
+#dev-pointer { position: fixed; inset: 0; z-index: 690; pointer-events: none; }
+.dev-readout { position: absolute; left: 0; right: 0; top: 0; background: rgba(20, 20, 22, .9); color: #f4e7b0; font: 600 11px ui-monospace, Menlo, Consolas, monospace; padding: 8px 14px; }
+.dev-ring { position: absolute; left: -22px; top: -22px; width: 44px; height: 44px; border-radius: 50%; border: 2px solid #e9c96b; background: rgba(233, 201, 107, .16); transition: background .1s; will-change: transform; }
+.dev-ring.down { background: rgba(233, 201, 107, .5); }
+code.dev-id { font: 10px ui-monospace, Menlo, monospace; background: var(--surface-2); padding: 1px 5px; border-radius: 5px; }
