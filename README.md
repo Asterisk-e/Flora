@@ -14,5 +14,5 @@ main release.
 - Put them in a folder
 - Open your terminal
 - use 'cd' to get to your folder
-- execute a python command to launch server
+- execute exactly 'python3 -m http.server 8000'
 - it should be live on 'localhost:8000'
