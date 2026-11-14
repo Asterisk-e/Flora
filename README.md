@@ -1,12 +1,18 @@
-# If you cant see deployments...
+# Experimental Branch
+Test out new features before they come to the main
+branch! The Experimental branch will be copied to
+the main branch after about 1-2 days of experimental
+testing.
 
-Enter flora here: https://asterisk-e.github.io/Flora/
+# Help out others who use this app
+Please, if you think you've found a bug, please
+report it as an issue for us to fix before the
+main release.
 
-# Flora is everything combined.
-
-Documents, Presentations, & everything else, all in one.
-
-# To travel ahead of time...
-
-Go to the experimental branch! Features are tested there before
-being committed on the main.
+# How to use this
+- Download the files
+- Put them in a folder
+- Open your terminal
+- use 'cd' to get to your folder
+- execute exactly 'python3 -m http.server 8000'
+- it should be live on 'localhost:8000'

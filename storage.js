@@ -26,7 +26,8 @@
     C.files.forEach(file => { const c = cats.get(file.type); if (!c) return; const size = C.fileSize(file); c.files.push({ file, size }); c.size += size; });
     const fileTotal = [...cats.values()].reduce((n, c) => n + c.size, 0);
     const meta = await C.getAllMeta();
-    const sysItems = [{ name: 'Profiles', size: jsonSize(C.profiles) }, { name: 'Settings', size: jsonSize(C.settings) }];
+    const devSize = window.FloraDev ? window.FloraDev.devSize() : 0;
+    const sysItems = [{ name: 'Profiles', size: jsonSize(C.profiles) }, { name: 'Settings', size: Math.max(0, jsonSize(C.settings) - devSize) }, ...(C.settings.devUnlocked ? [{ name: 'Developer options', size: devSize }] : [])];
     meta.forEach(m => {
       if (m.key === 'tasks') sysItems.push({ name: 'Rowan Tasks', size: jsonSize(m.value), key: m.key });
       else if (m.key.startsWith('tool:')) sysItems.push({ name: TOOL_NAMES[m.key] || m.key.slice(5), size: jsonSize(m.value), key: m.key });
